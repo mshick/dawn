@@ -1,0 +1,19 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-08-uuidv7-primary-keys.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Add uuid_generate_v7() and switch PK defaults",
+      "status": "pending",
+      "description": "**Goal:** The chat-schema migration defines `public.uuid_generate_v7()` and uses it as the default for both `threads.id` and `messages.id`. `pnpm db:reset` succeeds and inserts produce v7 UUIDs.\n\n**Files:**\n- Modify: `supabase/migrations/20260507124222_chat_schema.sql`\n\n**Acceptance Criteria:**\n- `public.uuid_generate_v7()` exists after `pnpm db:reset`.\n- `select public.uuid_generate_v7();` returns a UUID with version nibble `7`.\n- 5-row monotonic check via `pg_sleep(0.01)` returns strictly increasing UUIDs.\n- Column defaults for `threads.id` and `messages.id` evaluate to `uuid_generate_v7()`.\n- `pnpm generate` produces no diff to `src/lib/db/database.types.ts`.\n- `pnpm typecheck` and `pnpm lint` pass.\n\n**Verify:** `pnpm db:reset && pnpm generate && pnpm typecheck && pnpm lint`\n\n```json:metadata\n{\"files\": [\"supabase/migrations/20260507124222_chat_schema.sql\"], \"verifyCommand\": \"pnpm db:reset && pnpm generate && pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"uuid_generate_v7 exists in DB\", \"version nibble is 7\", \"monotonic across ms\", \"column defaults updated\", \"types unchanged\", \"typecheck/lint pass\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Document UUIDv7 convention in CLAUDE.md",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Future contributors see the UUIDv7 rule in CLAUDE.md and don't reach for `gen_random_uuid()`.\n\n**Files:**\n- Modify: `CLAUDE.md`\n\n**Acceptance Criteria:**\n- `CLAUDE.md` contains a bullet under \"Conventions → Architecture\" describing the UUIDv7 PK rule and pointing at the chat-schema migration.\n- No other unrelated edits.\n\n**Verify:** `git diff CLAUDE.md` shows only the new bullet; `pnpm lint` exits 0.\n\n```json:metadata\n{\"files\": [\"CLAUDE.md\"], \"verifyCommand\": \"pnpm lint\", \"acceptanceCriteria\": [\"new bullet under Conventions → Architecture\", \"no unrelated edits\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-08T00:00:00Z"
+}
