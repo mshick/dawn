@@ -61,7 +61,8 @@
   "json": {
     "formatter": {
       "indentStyle": "space",
-      "indentWidth": 2
+      "indentWidth": 2,
+      "trailingNewline": false
     }
   },
   "css": {
