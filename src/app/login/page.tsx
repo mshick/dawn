@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { env } from '@/lib/env';
 import { signInWithGitHub, signInWithGoogle } from './actions';
 import DevSignIn from './dev-sign-in';
 
@@ -9,7 +8,11 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const devAuthEnabled = env.DEV_AUTH_ENABLED === '1';
+  // Read process.env directly to match the route handler's gate. The
+  // cached env from @/lib/env can be empty if any other server var fails
+  // strict Zod parsing (cascading safeParse), which would silently hide
+  // this section. Server component, so the value never reaches the client.
+  const devAuthEnabled = process.env.DEV_AUTH_ENABLED === '1';
 
   return (
     <main className="mx-auto flex min-h-[60vh] w-full max-w-sm flex-col items-center justify-center gap-6 p-6">
