@@ -49,7 +49,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `pnpm db:start`   | `supabase start` (Docker)                            |
 | `pnpm db:stop`    | `supabase stop`                                      |
 | `pnpm db:reset`   | Re-apply migrations + seed                           |
-| `pnpm typecheck`  | `tsc --noEmit`                                       |
+| `pnpm check`      | `tsc --noEmit`                                       |
 | `pnpm lint`       | `biome check .`                                      |
 | `pnpm lint:fix`   | `biome check --write .`                              |
 | `pnpm format`     | `biome format --write .`                             |

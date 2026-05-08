@@ -1,0 +1,121 @@
+# .github/workflows/release-please.yml
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+env:
+  DO_NOT_TRACK: 1
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      major: ${{ steps.release.outputs.major }}
+      minor: ${{ steps.release.outputs.minor }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      pr_branch: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
+    steps:
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          release-type: node
+
+  build-dist:
+    name: Build dist
+    runs-on: ubuntu-latest
+    permissions: {}
+    needs: release-please
+    # Only run when release-please has an open PR (not on the release itself)
+    if: ${{ needs.release-please.outputs.pr_branch != '' && !needs.release-please.outputs.release_created }}
+    steps:
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Checkout Repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.release-please.outputs.pr_branch }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version-file: "package.json"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Action
+        run: npm run build
+
+      - name: Commit Dist If Changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          git diff-index --quiet HEAD || git commit -m "chore: build dist"
+          git push
+
+  tag:
+    name: Tag
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Tag Major and Minor Versions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -d v${{ needs.release-please.outputs.major }} || true
+          git tag -d v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }} || true
+          git push origin :v${{ needs.release-please.outputs.major }} || true
+          git push origin :v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }} || true
+          git tag -a v${{ needs.release-please.outputs.major }} -m "Release v${{ needs.release-please.outputs.major }}"
+          git tag -a v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }} -m "Release v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}"
+          git push origin v${{ needs.release-please.outputs.major }}
+          git push origin v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}
+
+  attest:
+    name: Attest
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-path: dist/index.js
