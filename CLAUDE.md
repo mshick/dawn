@@ -153,6 +153,10 @@ functionality:
 - **Server vs client Supabase** — never import `lib/supabase/server` or
   `lib/db` from a `'use client'` file.
 - **Generated files** — `database.types.ts` is regenerated; never hand-edit.
+- **UUID primary keys** — new tables with UUID PKs use
+  `default public.uuid_generate_v7()` (defined in the chat-schema migration).
+  Do not use `gen_random_uuid()`. UUIDv7's time-ordered prefix gives better
+  B-tree locality and keyset pagination than v4.
 - **Style additions** — prefer `cn()` + Tailwind utilities; add ShadCN
   primitives via `pnpm dlx shadcn@latest add <component>`.
 - **Background work** — anything async/durable belongs in an Inngest function,
