@@ -1,5 +1,7 @@
 import { Button } from '@/components/ui/button';
+import { env } from '@/lib/env';
 import { signInWithGitHub, signInWithGoogle } from './actions';
+import DevSignIn from './dev-sign-in';
 
 export default async function LoginPage({
   searchParams,
@@ -7,6 +9,7 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const devAuthEnabled = env.DEV_AUTH_ENABLED === '1';
 
   return (
     <main className="mx-auto flex min-h-[60vh] w-full max-w-sm flex-col items-center justify-center gap-6 p-6">
@@ -30,6 +33,8 @@ export default async function LoginPage({
           </Button>
         </form>
       </div>
+
+      {devAuthEnabled && <DevSignIn />}
     </main>
   );
 }
