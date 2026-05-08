@@ -25,6 +25,10 @@ function isAlreadyRegistered(
 }
 
 export async function POST(req: Request): Promise<Response> {
+  // Read process.env directly (not the cached env from @/lib/env) so the
+  // gate works even if Zod parsing of env at startup failed, and so tests
+  // can mutate the flag per-case. The /login page uses env.ts as a second
+  // independent check.
   if (process.env.DEV_AUTH_ENABLED !== '1') {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
@@ -64,6 +68,9 @@ export async function POST(req: Request): Promise<Response> {
   const tokenHash = link.data.properties.hashed_token;
 
   const supabase = await createServerSupabase();
+  // 'email' is the OTP type for magic-link hashed tokens in @supabase/supabase-js
+  // v2. Older SDKs used 'magiclink' here — match the installed type definition
+  // if upgrading.
   const { error: verifyError } = await supabase.auth.verifyOtp({
     type: 'email',
     token_hash: tokenHash,

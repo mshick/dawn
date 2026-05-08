@@ -20,6 +20,8 @@ export default function DevSignIn() {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ email }),
         });
+        // res.json() is unknown; the route's response shape is documented at
+        // src/app/api/dev/login/route.ts and the gate keeps this client-only.
         const json = (await res.json().catch(() => null)) as {
           ok?: boolean;
           next?: string;
