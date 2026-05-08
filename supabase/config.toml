@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "chat-database"
+project_id = "dawn-database"
 
 [api]
 enabled = true
@@ -10,9 +10,9 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+schemas = ["graphql_public", "public"]
 # Extra schemas to add to the search_path of every request.
-extra_search_path = ["public", "extensions"]
+extra_search_path = ["extensions", "public"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
 # for accidental or malicious requests.
 max_rows = 1000
@@ -129,10 +129,10 @@ enabled = true
 # Store analytical data in S3 for running ETL jobs over Iceberg Catalog
 # This feature is only available on the hosted platform.
 [storage.analytics]
-enabled = false
+enabled        = false
+max_catalogs   = 2
 max_namespaces = 5
-max_tables = 10
-max_catalogs = 2
+max_tables     = 10
 
 # Analytics Buckets is available to Supabase Pro plan.
 # [storage.analytics.buckets.my-warehouse]
@@ -140,7 +140,7 @@ max_catalogs = 2
 # Store vector embeddings in S3 for large and durable datasets
 # This feature is only available on the hosted platform.
 [storage.vector]
-enabled = false
+enabled     = false
 max_buckets = 10
 max_indexes = 5
 
@@ -282,8 +282,8 @@ max_frequency = "5s"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
-enabled = false
-account_sid = ""
+account_sid         = ""
+enabled             = false
 message_service_sid = ""
 # DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
 auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
@@ -301,10 +301,10 @@ verify_enabled = false
 # Configure MFA via Phone Messaging
 [auth.mfa.phone]
 enroll_enabled = false
+max_frequency  = "5s"
+otp_length     = 6
+template       = "Your code is {{ .Code }}"
 verify_enabled = false
-otp_length = 6
-template = "Your code is {{ .Code }}"
-max_frequency = "5s"
 
 # Configure MFA via WebAuthn
 # [auth.mfa.web_authn]
@@ -315,8 +315,8 @@ max_frequency = "5s"
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
 [auth.external.apple]
-enabled = false
 client_id = ""
+enabled   = false
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 # Overrides the default auth callback URL derived from auth.external_url.
@@ -330,10 +330,10 @@ skip_nonce_check = false
 email_optional = false
 
 [auth.external.github]
-enabled = true
-client_id = "env(SUPABASE_AUTH_GITHUB_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_GITHUB_SECRET)"
+client_id    = "env(SUPABASE_AUTH_GITHUB_CLIENT_ID)"
+enabled      = true
 redirect_uri = "http://localhost:54321/auth/v1/callback"
+secret       = "env(SUPABASE_AUTH_GITHUB_SECRET)"
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
@@ -388,7 +388,7 @@ deno_version = 2
 
 [analytics]
 enabled = true
-port = 54327
+port    = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
 
