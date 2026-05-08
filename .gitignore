@@ -40,7 +40,6 @@ yarn-error.log*
 
 # isolated agent workspaces
 /.worktrees/
-/.claude/worktrees/
 
 # vercel
 .vercel
