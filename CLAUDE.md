@@ -103,6 +103,9 @@ functionality:
 - `SUPABASE_AUTH_GITHUB_CLIENT_ID` + `SUPABASE_AUTH_GITHUB_SECRET` (or the
   Google equivalents) for OAuth login
 - `INNGEST_DEV=1` for local dev (points the SDK at the local dev server)
+- `DEV_AUTH_ENABLED=1` (optional) — exposes a local-only email sign-in at
+  `/api/dev/login` and a "Local dev sign-in" form on `/login`. Never set in
+  deployed environments.
 
 `pnpm db:start` prints fresh values for the Supabase keys.
 

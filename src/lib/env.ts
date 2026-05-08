@@ -11,6 +11,8 @@ const serverSchema = z.object({
   SUPABASE_AUTH_GITHUB_SECRET: z.string().min(1).optional(),
   SUPABASE_AUTH_GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   SUPABASE_AUTH_GOOGLE_SECRET: z.string().min(1).optional(),
+  // Local-dev only: enables /api/dev/login backdoor. Never set in production.
+  DEV_AUTH_ENABLED: z.literal('1').optional(),
 });
 
 const clientSchema = z.object({
