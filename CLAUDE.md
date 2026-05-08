@@ -108,10 +108,45 @@ functionality:
 
 ## Conventions
 
+### TypeScript
+
 - **Strict TS** — fix the type, don't `// @ts-ignore`. `any` is a `warn`, not
   a tool.
+- **`noUncheckedIndexedAccess: true`** — array/record access is `T | undefined`.
+  Narrow it; don't paper over it.
+- **No unchecked casts** — `as Foo` on values of unknown shape is a bug
+  waiting to happen. Validate at the boundary instead (Zod, type guards).
+- **Explicit casts are a code smell** — every `as` (and every `!` non-null
+  assertion) needs a one-line comment explaining *why* it's safe (an
+  invariant the type system can't see, a generated-type quirk, etc.). No
+  comment, no cast.
+- **All external interfaces are validated** — anything entering the system
+  (HTTP bodies, query params, third-party API responses, env vars, message
+  payloads) goes through a Zod schema (or equivalent runtime validator)
+  before it's typed. Trusting an `unknown` because TypeScript stopped
+  complaining doesn't count.
+
+### Linting
+
 - **No ESLint/Prettier** — Biome is the only formatter/linter. CI runs
   `pnpm lint` + `pnpm typecheck`.
+- **`noFloatingPromises` must stay green** — every promise is `await`ed,
+  returned, or explicitly handled. Fire-and-forget belongs in an Inngest
+  function, not a `void` cast.
+- **`noImportCycles` must stay green** — break cycles by extracting shared
+  types/utilities, not by suppressing the rule.
+- **Pre-push checklist** — run `pnpm typecheck` and `pnpm lint` locally
+  before pushing. CI failing on these is avoidable noise.
+
+### Architecture
+
+- **Leverage the framework, don't reinvent it** — Next.js, Supabase, Inngest,
+  Vercel `ai`, Zod, Kysely, ShadCN are already pulled in. Reach for the
+  built-in primitive (route handlers, server components, Inngest steps,
+  Supabase auth, Zod parsing) before writing your own.
+- **No packaged ORMs** — Kysely is a query builder, not an ORM, and that's
+  deliberate. We need to drop down to raw SQL without fighting an
+  abstraction. Don't add Prisma, Drizzle, TypeORM, etc.
 - **Server vs client Supabase** — never import `lib/supabase/server` or
   `lib/db` from a `'use client'` file.
 - **Generated files** — `database.types.ts` is regenerated; never hand-edit.
@@ -123,8 +158,9 @@ functionality:
   RLS-honoring). Privileged writes use `@/lib/db/admin` ONLY from server code
   that has already validated user ownership upstream (currently: the Inngest
   `chatStream` function, gated by `/api/chat`).
-- **Client → server interactions** — go through REST under `/api/...`. Use
-  Route Handlers for mutations (`POST` / `PUT` / `PATCH` / `DELETE`) and call
-  them with `fetch` + `useTransition`. **Server actions are not used in this
-  project.** (`src/app/login/actions.ts` predates this convention and will be
-  migrated in a separate ticket.)
+- **Client → server interactions** — REST under `/api/...` is the preferred
+  approach for **all future work**. Use Route Handlers for mutations
+  (`POST` / `PUT` / `PATCH` / `DELETE`) and call them with `fetch` +
+  `useTransition`. **Server actions are not used in this project.**
+  (`src/app/login/actions.ts` predates this convention and will be migrated
+  in a separate ticket.)

@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# dawn
+
+A Next.js + Supabase + Inngest template with Anthropic-powered chat. See
+[CLAUDE.md](CLAUDE.md) for the full stack overview and conventions.
 
 ## Getting Started
 
-First, run the development server:
+After cloning, run the bootstrap script first to rename the project (slug,
+display name, Inngest app id, Supabase `project_id`, page titles, `CLAUDE.md`):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm bootstrap
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then copy and fill in environment variables:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp .env.example .env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Required env vars (see [CLAUDE.md](CLAUDE.md#environment) for the full list):
 
-## Learn More
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- `ANTHROPIC_API_KEY`
+- OAuth provider keys (GitHub or Google)
+- `INNGEST_DEV=1` for local dev
 
-To learn more about Next.js, take a look at the following resources:
+`pnpm db:start` prints fresh values for the Supabase keys.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Run
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm db:start   # boots local Supabase (Docker)
+pnpm dev        # generate → next dev (Turbopack) + Inngest dev server
+```
 
-## Deploy on Vercel
+Open [http://localhost:3000](http://localhost:3000).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Script            | Purpose                                              |
+| ----------------- | ---------------------------------------------------- |
+| `pnpm dev`        | Full dev: codegen, Next.js, and Inngest concurrently |
+| `pnpm build`      | `prebuild` codegen, then `next build`                |
+| `pnpm generate`   | Run all codegen once (Supabase types)                |
+| `pnpm bootstrap`  | Rename the template to your project                  |
+| `pnpm db:start`   | `supabase start` (Docker)                            |
+| `pnpm db:stop`    | `supabase stop`                                      |
+| `pnpm db:reset`   | Re-apply migrations + seed                           |
+| `pnpm typecheck`  | `tsc --noEmit`                                       |
+| `pnpm lint`       | `biome check .`                                      |
+| `pnpm lint:fix`   | `biome check --write .`                              |
+| `pnpm format`     | `biome format --write .`                             |
+| `pnpm test`       | `vitest run`                                         |
+| `pnpm test:watch` | `vitest`                                             |
+
+## Stack
+
+- Next.js (App Router, RSC, Turbopack), React 19, TypeScript (strict)
+- Tailwind CSS v4, ShadCN UI (`new-york`/`neutral`)
+- Supabase (Postgres + Auth), Kysely query builder
+- Inngest for background jobs and chat streaming
+- Vercel `ai` + `@ai-sdk/anthropic` (`claude-sonnet-4-6`)
+- Biome (lint + format), Vitest + Testing Library + happy-dom
+
+## Deploy
+
+Easiest path: [Vercel](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
+You'll need a hosted Supabase project, an Inngest app, and the env vars above
+configured in the platform.

@@ -26,6 +26,9 @@
   },
   "linter": {
     "enabled": true,
+    "domains": {
+      "project": "recommended"
+    },
     "rules": {
       "recommended": true,
       "style": {
@@ -34,11 +37,15 @@
         "useNodejsImportProtocol": "error"
       },
       "suspicious": {
-        "noExplicitAny": "warn"
+        "noExplicitAny": "warn",
+        "noImportCycles": "error"
       },
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error"
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
       }
     }
   },
