@@ -1,0 +1,47 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-08-dev-auth-backdoor.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Wire env var and document it",
+      "status": "pending",
+      "description": "**Goal:** `DEV_AUTH_ENABLED` exists in the validated env schema and in `.env.example`, with a clear warning about production.\n\n**Files:**\n- Modify: `src/lib/env.ts`\n- Modify: `.env.example`\n- Modify: `CLAUDE.md`\n\n**Acceptance Criteria:**\n- env.DEV_AUTH_ENABLED typed as '1' | undefined\n- pnpm typecheck passes\n- .env.example documents the var with a never-set-in-production warning\n- CLAUDE.md Environment section mentions the var\n\n**Verify:** `pnpm typecheck`\n\n```json:metadata\n{\"files\": [\"src/lib/env.ts\", \".env.example\", \"CLAUDE.md\"], \"verifyCommand\": \"pnpm typecheck\", \"acceptanceCriteria\": [\"DEV_AUTH_ENABLED typed as '1' | undefined\", \"pnpm typecheck passes\", \".env.example documents the var with production warning\", \"CLAUDE.md Environment section mentions the var\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Supabase service-role client",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** A reusable service-role Supabase JS client at `src/lib/supabase/admin.ts`, mirroring the conventions of `src/lib/db/admin.ts` (server-only, throws if env missing).\n\n**Files:**\n- Create: `src/lib/supabase/admin.ts`\n\n**Acceptance Criteria:**\n- Exports createAdminClient() returning SupabaseClient<Database>\n- Imports 'server-only'\n- Throws if SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is missing\n- No cookie adapter\n- pnpm typecheck and pnpm lint pass\n\n**Verify:** `pnpm typecheck && pnpm lint`\n\n```json:metadata\n{\"files\": [\"src/lib/supabase/admin.ts\"], \"verifyCommand\": \"pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"Exports createAdminClient() returning SupabaseClient<Database>\", \"Imports 'server-only'\", \"Throws on missing env vars\", \"No cookie adapter\", \"pnpm typecheck and pnpm lint pass\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: POST /api/dev/login route handler with tests",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** A Route Handler that, when gated on, ensures the user exists, generates a magic-link hashed_token, and verifies it through the cookie-bound server client. Drive the implementation with tests.\n\n**Files:**\n- Create: `src/app/api/dev/login/route.ts`\n- Create: `src/app/api/dev/login/route.test.ts`\n\n**Acceptance Criteria:**\n- 404 when DEV_AUTH_ENABLED !== '1'\n- 400 on invalid body or unsafe next\n- createUser with email_confirm:true; swallows already-registered\n- generateLink with type:'magiclink' and uses hashed_token\n- verifyOtp via server client with token_hash\n- All tests pass\n\n**Verify:** `pnpm test src/app/api/dev/login/route.test.ts`\n\n```json:metadata\n{\"files\": [\"src/app/api/dev/login/route.ts\", \"src/app/api/dev/login/route.test.ts\"], \"verifyCommand\": \"pnpm test src/app/api/dev/login/route.test.ts\", \"acceptanceCriteria\": [\"Returns 404 when gate off\", \"Returns 400 on invalid body or unsafe next\", \"createUser with email_confirm:true; swallows already-registered\", \"generateLink with type:'magiclink' and uses hashed_token\", \"verifyOtp via server client with token_hash\", \"All route tests pass\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: <DevSignIn /> client component",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Client component with email input + submit, posts to /api/dev/login, navigates on success, shows error on failure.\n\n**Files:**\n- Create: `src/app/login/dev-sign-in.tsx`\n\n**Acceptance Criteria:**\n- 'use client', default export\n- Email input typed email, required\n- useTransition for in-flight state\n- On 200, router.push(json.next) and router.refresh()\n- On non-200, shows error in destructive-styled block\n- pnpm typecheck and pnpm lint pass\n\n**Verify:** `pnpm typecheck && pnpm lint`\n\n```json:metadata\n{\"files\": [\"src/app/login/dev-sign-in.tsx\"], \"verifyCommand\": \"pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"'use client' default export\", \"Email input required and typed email\", \"useTransition for pending state\", \"router.push(json.next) on success\", \"Shows error on failure\", \"Lint and typecheck pass\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Wire DevSignIn into /login page",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** /login server component conditionally renders <DevSignIn /> when env.DEV_AUTH_ENABLED === '1'.\n\n**Files:**\n- Modify: `src/app/login/page.tsx`\n\n**Acceptance Criteria:**\n- Renders DevSignIn below OAuth buttons when gate is on\n- Renders unchanged when gate is off\n- env read from @/lib/env\n- No 'use client' at page level\n- pnpm typecheck and pnpm lint pass\n\n**Verify:** `pnpm typecheck && pnpm lint`\n\n```json:metadata\n{\"files\": [\"src/app/login/page.tsx\"], \"verifyCommand\": \"pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"Renders DevSignIn when gate is on\", \"Unchanged behaviour when gate is off\", \"env read from @/lib/env\", \"No 'use client' at page level\", \"Lint and typecheck pass\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Manual smoke + final verification",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** Confirm the end-to-end flow works against a real local Supabase and that the gate truly disables it.\n\n**Files:** (verification only)\n\n**Acceptance Criteria:**\n- With DEV_AUTH_ENABLED=1, submitting email lands on /chat\n- With flag unset, /login shows only OAuth and POST /api/dev/login returns 404\n- pnpm test, pnpm typecheck, pnpm lint all pass\n\n**Verify:** `pnpm test && pnpm typecheck && pnpm lint`\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"pnpm test && pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"DEV_AUTH_ENABLED=1 sign-in lands on /chat\", \"Gate-off curl returns 404\", \"Gate-off /login hides DevSignIn\", \"All test/lint/typecheck pass\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-08T00:00:00Z"
+}
