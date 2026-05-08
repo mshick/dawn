@@ -37,7 +37,7 @@ No new files. No test files (verification is `pnpm db:reset` + a `select` smoke 
 - [ ] `select public.uuid_generate_v7();` returns a UUID whose 13th hex character is `7` (version nibble).
 - [ ] `select public.uuid_generate_v7(), pg_sleep(0.01) from generate_series(1, 5);` returns 5 strictly increasing UUIDs.
 - [ ] `pg_get_expr(adbin, adrelid)` for the `id` columns of `public.threads` and `public.messages` evaluates to `uuid_generate_v7()`.
-- [ ] `pnpm generate` produces no diff to `src/lib/db/database.types.ts` (column types still `uuid`).
+- [ ] `pnpm generate` adds a single `Functions.uuid_generate_v7` entry to `src/lib/db/database.types.ts`; no column-type changes.
 - [ ] `pnpm typecheck` and `pnpm lint` pass.
 
 **Verify:** Sequence of commands below — see Step 4.
@@ -58,7 +58,7 @@ returns uuid
 language plpgsql
 volatile
 parallel safe
-set search_path = pg_catalog
+set search_path = pg_catalog, extensions
 as $$
 declare
   v_ts_ms bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
@@ -150,11 +150,11 @@ pnpm lint
 
 Expected:
 
-- `pnpm generate` produces no diff to `src/lib/db/database.types.ts` (id columns are still `uuid`).
+- `pnpm generate` adds only the new `Functions.uuid_generate_v7` entry to `src/lib/db/database.types.ts`; column types unchanged.
 - `pnpm typecheck` exits 0.
 - `pnpm lint` exits 0.
 
-If `database.types.ts` did change, inspect the diff — it should not have. A diff usually means a column type changed unexpectedly.
+The expected diff is one new entry under `Functions.uuid_generate_v7` in `Database.public`. Any change to existing column types is unexpected and should be investigated.
 
 - [ ] **Step 5: End-to-end smoke (optional but recommended)**
 

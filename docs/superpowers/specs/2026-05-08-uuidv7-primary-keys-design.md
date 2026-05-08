@@ -35,7 +35,7 @@ returns uuid
 language plpgsql
 volatile
 parallel safe
-set search_path = pg_catalog
+set search_path = pg_catalog, extensions
 as $$
 declare
   v_ts_ms bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
@@ -65,7 +65,7 @@ Notes:
 - Conforms to RFC 9562 §5.7 (UUID Version 7).
 - `gen_random_bytes` comes from `pgcrypto`, which Supabase enables by default.
 - `volatile` is required (each call returns a different value); `parallel safe` is fine because `gen_random_bytes` and `clock_timestamp` are themselves parallel-safe.
-- Pinning `search_path = pg_catalog` avoids resolution surprises under different invokers.
+- Pinning `search_path = pg_catalog, extensions` avoids resolution surprises under different invokers. `extensions` is included because Supabase installs `pgcrypto` (which provides `gen_random_bytes`) into that schema rather than `pg_catalog`.
 - Execute is granted to the standard Supabase roles so the function is callable from RLS-protected inserts and from the service-role Kysely client.
 
 ### Migration edits
@@ -90,7 +90,7 @@ Add a single bullet to `CLAUDE.md` under the existing "Conventions → Architect
 1. `pnpm db:reset` runs cleanly.
 2. `select public.uuid_generate_v7();` returns a UUID whose 13th hex character (high nibble of byte 6) is `7`.
 3. `select public.uuid_generate_v7(), pg_sleep(0.01) from generate_series(1, 5);` returns values whose text representation is strictly increasing (the 10 ms gap guarantees a different timestamp prefix per row). Without `pg_sleep`, ordering is only guaranteed across millisecond boundaries — within the same ms the random tail wins, which is RFC-compliant.
-4. `pnpm generate` produces no diff to `src/lib/db/database.types.ts` (column types remain `uuid`).
+4. `pnpm generate` adds a single `Functions.uuid_generate_v7` entry to `src/lib/db/database.types.ts` (`{ Args: never; Returns: string }`). No column types change.
 5. `pnpm typecheck` and `pnpm lint` pass.
 6. Manual smoke test: sign in to `/chat`, send a message, confirm the new `threads.id` and `messages.id` rows have v7 UUIDs (timestamp prefix matches insert time).
 
