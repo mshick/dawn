@@ -1,7 +1,38 @@
+-- uuid v7 generator -----------------------------------------------------------
+
+create or replace function public.uuid_generate_v7()
+returns uuid
+language plpgsql
+volatile
+parallel safe
+set search_path = pg_catalog, extensions
+as $$
+declare
+  v_ts_ms bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  v_bytes bytea  := gen_random_bytes(16);
+begin
+  -- 48-bit big-endian unix_ts_ms in bytes 0..5
+  v_bytes := set_byte(v_bytes, 0, ((v_ts_ms >> 40) & 255)::int);
+  v_bytes := set_byte(v_bytes, 1, ((v_ts_ms >> 32) & 255)::int);
+  v_bytes := set_byte(v_bytes, 2, ((v_ts_ms >> 24) & 255)::int);
+  v_bytes := set_byte(v_bytes, 3, ((v_ts_ms >> 16) & 255)::int);
+  v_bytes := set_byte(v_bytes, 4, ((v_ts_ms >> 8)  & 255)::int);
+  v_bytes := set_byte(v_bytes, 5, ( v_ts_ms        & 255)::int);
+  -- version 7 in high nibble of byte 6
+  v_bytes := set_byte(v_bytes, 6, (get_byte(v_bytes, 6) & 15) | 112);
+  -- variant 10 in top two bits of byte 8
+  v_bytes := set_byte(v_bytes, 8, (get_byte(v_bytes, 8) & 63) | 128);
+  return encode(v_bytes, 'hex')::uuid;
+end;
+$$;
+
+revoke all on function public.uuid_generate_v7() from public;
+grant execute on function public.uuid_generate_v7() to authenticated, service_role, anon;
+
 -- threads --------------------------------------------------------------------
 
 create table public.threads (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default public.uuid_generate_v7(),
   user_id uuid not null references auth.users(id) on delete cascade,
   title text,
   created_at timestamptz not null default now(),
@@ -14,7 +45,7 @@ create index threads_user_id_updated_at_idx
 -- messages -------------------------------------------------------------------
 
 create table public.messages (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default public.uuid_generate_v7(),
   thread_id uuid not null references public.threads(id) on delete cascade,
   role text not null check (role in ('user', 'assistant', 'system')),
   content text not null default '',
