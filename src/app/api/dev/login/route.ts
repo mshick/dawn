@@ -13,14 +13,14 @@ const bodySchema = z.object({
     .optional(),
 });
 
-const ALREADY_REGISTERED_PATTERNS = [
-  /already.*registered/i,
-  /already exists/i,
-  /user_already_exists/i,
-];
+const ALREADY_REGISTERED_CODE = 'user_already_exists';
+const ALREADY_REGISTERED_PATTERNS = [/already.*registered/i, /already exists/i];
 
-function isAlreadyRegistered(error: { message?: string } | null | undefined): boolean {
-  if (!error?.message) return false;
+function isAlreadyRegistered(
+  error: { message?: string; code?: string } | null | undefined,
+): boolean {
+  if (!error) return false;
+  if (error.code === ALREADY_REGISTERED_CODE) return true;
   return ALREADY_REGISTERED_PATTERNS.some((p) => p.test(error.message ?? ''));
 }
 

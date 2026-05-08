@@ -135,7 +135,11 @@ describe('POST /api/dev/login', () => {
   it('swallows "already registered" createUser error and still verifies', async () => {
     adminCreateUser.mockResolvedValue({
       data: { user: null },
-      error: { message: 'A user with this email address has already been registered', status: 422 },
+      error: {
+        message: 'A user with this email address has already been registered',
+        code: 'user_already_exists',
+        status: 422,
+      },
     });
     adminGenerateLink.mockResolvedValue({
       data: { properties: { hashed_token: 'tok' } },
@@ -146,6 +150,25 @@ describe('POST /api/dev/login', () => {
     const { POST } = await import('./route');
 
     const res = await POST(postRequest({ email: 'existing@example.com' }));
+
+    expect(res.status).toBe(200);
+    expect(verifyOtp).toHaveBeenCalled();
+  });
+
+  it('swallows "already registered" via message regex when code is absent', async () => {
+    adminCreateUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'User already exists', status: 422 },
+    });
+    adminGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: 'tok' } },
+      error: null,
+    });
+    verifyOtp.mockResolvedValue({ data: {}, error: null });
+
+    const { POST } = await import('./route');
+
+    const res = await POST(postRequest({ email: 'msg@example.com' }));
 
     expect(res.status).toBe(200);
     expect(verifyOtp).toHaveBeenCalled();
