@@ -24,7 +24,7 @@ Required env vars (see [CLAUDE.md](CLAUDE.md#environment) for the full list):
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 - `ANTHROPIC_API_KEY`
-- OAuth provider keys (GitHub or Google)
+- GitHub OAuth keys (`SUPABASE_AUTH_GITHUB_CLIENT_ID` + `SUPABASE_AUTH_GITHUB_SECRET`)
 - `INNGEST_DEV=1` for local dev
 
 `pnpm db:start` prints fresh values for the Supabase keys.

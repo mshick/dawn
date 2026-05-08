@@ -4,12 +4,12 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
-async function signInWith(provider: 'github' | 'google') {
+export async function signInWithGitHub() {
   const supabase = await createClient();
   const origin = (await headers()).get('origin') ?? 'http://localhost:3000';
 
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
+    provider: 'github',
     options: { redirectTo: `${origin}/auth/callback?next=/chat` },
   });
 
@@ -18,14 +18,6 @@ async function signInWith(provider: 'github' | 'google') {
   }
 
   redirect(data.url);
-}
-
-export async function signInWithGitHub() {
-  await signInWith('github');
-}
-
-export async function signInWithGoogle() {
-  await signInWith('google');
 }
 
 export async function signOut() {

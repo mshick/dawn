@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { signInWithGitHub, signInWithGoogle } from './actions';
+import { signInWithGitHub } from './actions';
 import DevSignIn from './dev-sign-in';
 
 export default async function LoginPage({
@@ -28,11 +28,6 @@ export default async function LoginPage({
         <form action={signInWithGitHub}>
           <Button type="submit" className="w-full" variant="outline">
             Continue with GitHub
-          </Button>
-        </form>
-        <form action={signInWithGoogle}>
-          <Button type="submit" className="w-full" variant="outline">
-            Continue with Google
           </Button>
         </form>
       </div>

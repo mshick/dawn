@@ -100,8 +100,8 @@ functionality:
 - `SUPABASE_DB_URL` (Kysely)
 - `SUPABASE_SERVICE_ROLE_KEY` (Inngest function bypasses RLS via `lib/db/admin`)
 - `ANTHROPIC_API_KEY` (chat route)
-- `SUPABASE_AUTH_GITHUB_CLIENT_ID` + `SUPABASE_AUTH_GITHUB_SECRET` (or the
-  Google equivalents) for OAuth login
+- `SUPABASE_AUTH_GITHUB_CLIENT_ID` + `SUPABASE_AUTH_GITHUB_SECRET` for OAuth
+  login (GitHub is the only supported OAuth provider)
 - `INNGEST_DEV=1` for local dev (points the SDK at the local dev server)
 - `DEV_AUTH_ENABLED=1` (optional) — exposes a local-only email sign-in at
   `/api/dev/login` and a "Local dev sign-in" form on `/login`. Never set in
