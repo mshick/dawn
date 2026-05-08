@@ -1,0 +1,8 @@
+onlyBuiltDependencies:
+  - supabase
+  - inngest-cli
+  - sharp
+  - unrs-resolver
+  - "@biomejs/biome"
+  - esbuild
+  - protobufjs
