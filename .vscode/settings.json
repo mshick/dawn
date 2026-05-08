@@ -1,0 +1,67 @@
+{
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.preferences.preferTypeOnlyAutoImports": true,
+  "js/ts.preferences.importModuleSpecifierEnding": "js",
+  "js/ts.preferences.importModuleSpecifier": "relative",
+  "biome.enabled": true,
+  "prettier.enable": true,
+  "editor.formatOnPaste": false,
+  "editor.formatOnType": false,
+  "css.validate": false,
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[graphql]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[tailwindcss]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.wordWrap": "on"
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "never",
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports": "never",
+    "source.organizeImports.biome": "explicit"
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/__snapshots__": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/dist": true,
+    "packages/*/es": true,
+    "packages/*/.webpack": true,
+    "packages/*/storybook-static": true
+  },
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "editor.quickSuggestions": {
+    "strings": "on"
+  }
+}

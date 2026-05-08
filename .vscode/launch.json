@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "[VITEST] watch current file",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "program": "${workspaceRoot}/node_modules/vitest/dist/cli.js",
+      "args": ["--no-file-parallelism", "--max-workers=1", "${relativeFile}"],
+      "env": {
+        "NODE_OPTIONS": "--no-warnings"
+      },
+      "autoAttachChildProcesses": true,
+      "console": "integratedTerminal",
+      "smartStep": true,
+      "internalConsoleOptions": "neverOpen"
+    }
+  ]
+}
