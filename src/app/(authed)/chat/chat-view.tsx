@@ -18,10 +18,19 @@ import { Button } from '@/components/ui/button';
 import { DocumentChipRail } from './document-chip-rail';
 import { type ThreadDocument, useThreadDocuments } from './use-thread-documents';
 
+// MessagePart mirrors the shape persisted by the Inngest chatStream function in
+// `messages.parts`. Co-located here (not in a shared module) to keep the
+// renderer the single owner and avoid import cycles with `page.tsx`.
+export type MessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'tool-call'; toolName: string; toolCallId: string; args: unknown }
+  | { type: 'tool-result'; toolName: string; toolCallId: string; result: unknown };
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   text: string;
+  parts: MessagePart[] | null;
 }
 
 interface ThreadSummary {
@@ -171,8 +180,8 @@ export function ChatView({
     const tempAssistantId = `local-assistant-${crypto.randomUUID()}`;
     setMessages((prev) => [
       ...prev,
-      { id: tempUserId, role: 'user', text },
-      { id: tempAssistantId, role: 'assistant', text: '' },
+      { id: tempUserId, role: 'user', text, parts: null },
+      { id: tempAssistantId, role: 'assistant', text: '', parts: null },
     ]);
 
     try {
@@ -230,7 +239,7 @@ export function ChatView({
       const tempAssistantId = `local-assistant-${crypto.randomUUID()}`;
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantMessageId ? { ...m, id: tempAssistantId, text: '' } : m,
+          m.id === assistantMessageId ? { ...m, id: tempAssistantId, text: '', parts: null } : m,
         ),
       );
 
@@ -367,8 +376,48 @@ export function ChatView({
                   </Button>
                 )}
               </div>
-              <div className="whitespace-pre-wrap text-sm">
-                {m.text || (m.role === 'assistant' && status === 'streaming' ? '…' : '')}
+              <div className="flex flex-col gap-2 text-sm">
+                {m.parts && m.role === 'assistant' ? (
+                  m.parts.map((p, i) => {
+                    // Parts for a stored message are append-only and never
+                    // reordered, so index-with-message-id is a stable key.
+                    // For tool parts we have a real `toolCallId` — prefer it.
+                    const key =
+                      p.type === 'tool-call' || p.type === 'tool-result'
+                        ? `${p.type}-${p.toolCallId}`
+                        : `${m.id}-text-${i}`;
+                    if (p.type === 'text') {
+                      return (
+                        <p key={key} className="whitespace-pre-wrap">
+                          {p.text}
+                        </p>
+                      );
+                    }
+                    if (p.type === 'tool-call') {
+                      return (
+                        <details key={key} className="rounded-md border bg-muted/40 p-2 text-xs">
+                          <summary className="cursor-pointer font-mono">
+                            ▶ {p.toolName}({JSON.stringify(p.args)})
+                          </summary>
+                        </details>
+                      );
+                    }
+                    return (
+                      <details key={key} className="rounded-md border bg-muted/40 p-2 text-xs">
+                        <summary className="cursor-pointer font-mono">
+                          ↩ {p.toolName} result
+                        </summary>
+                        <pre className="mt-2 overflow-x-auto">
+                          {JSON.stringify(p.result, null, 2)}
+                        </pre>
+                      </details>
+                    );
+                  })
+                ) : (
+                  <p className="whitespace-pre-wrap">
+                    {m.text || (m.role === 'assistant' && status === 'streaming' ? '…' : '')}
+                  </p>
+                )}
               </div>
             </div>
           ))}

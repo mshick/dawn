@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { adminDb } from '@/lib/db/admin';
 import { createClient } from '@/lib/supabase/server';
-import { ChatView } from './chat-view';
+import { ChatView, type MessagePart } from './chat-view';
 import type { ThreadDocument } from './use-thread-documents';
 
 export const dynamic = 'force-dynamic';
@@ -29,11 +29,17 @@ export default async function ChatPage({
   // fresh canvas, not the most-recent conversation.
   const activeThreadId = requestedThreadId ?? null;
 
-  let messages: { id: string; role: string; content: string; superseded_at: string | null }[] = [];
+  let messages: {
+    id: string;
+    role: string;
+    content: string;
+    parts: unknown;
+    superseded_at: string | null;
+  }[] = [];
   if (activeThreadId) {
     const { data } = await supabase
       .from('messages')
-      .select('id, role, content, superseded_at')
+      .select('id, role, content, parts, superseded_at')
       .eq('thread_id', activeThreadId)
       .is('superseded_at', null)
       .order('created_at', { ascending: true });
@@ -90,6 +96,9 @@ export default async function ChatPage({
           id: m.id,
           role: m.role,
           text: m.content,
+          // `parts` is `Json | null` in the generated DB types; the writer
+          // (Inngest chatStream) only ever stores arrays matching `MessagePart`.
+          parts: m.parts as MessagePart[] | null,
         }))}
       initialDocuments={initialDocuments}
     />
