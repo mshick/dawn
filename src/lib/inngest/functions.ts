@@ -157,9 +157,10 @@ export const chatStream = inngest.createFunction(
         .updateTable('messages')
         .set({
           content: buffer,
-          // Cast: parts is a structured array of plain JSON-serializable objects;
-          // the generated `Json` recursive type can't infer that from `Record<string, unknown>`.
-          parts: parts as unknown as Json,
+          // pg driver doesn't auto-stringify JS objects/arrays for jsonb columns;
+          // pass valid JSON text. Cast: the generated `Json` type expects the parsed
+          // shape, but at the wire level a JSON string is what jsonb accepts.
+          parts: JSON.stringify(parts) as unknown as Json,
           completed_at: completedAt.toISOString(),
           finish_reason: finishReason ?? null,
           model: CLAUDE_MODEL,
