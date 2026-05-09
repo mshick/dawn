@@ -27,18 +27,18 @@ beforeEach(() => {
 describe('extractText (txt)', () => {
   it('decodes utf-8', async () => {
     const bytes = enc.encode('hello world');
-    await expect(
-      extractText({ kind: 'txt', bytes, byteSize: bytes.length }),
-    ).resolves.toBe('hello world');
+    await expect(extractText({ kind: 'txt', bytes, byteSize: bytes.length })).resolves.toBe(
+      'hello world',
+    );
   });
 });
 
 describe('extractText (md)', () => {
   it('preserves markdown', async () => {
     const bytes = enc.encode('# Title\n\n**bold**');
-    await expect(
-      extractText({ kind: 'md', bytes, byteSize: bytes.length }),
-    ).resolves.toBe('# Title\n\n**bold**');
+    await expect(extractText({ kind: 'md', bytes, byteSize: bytes.length })).resolves.toBe(
+      '# Title\n\n**bold**',
+    );
   });
 });
 
@@ -46,9 +46,7 @@ describe('extractText (docx)', () => {
   it('calls mammoth.extractRawText', async () => {
     extractRawTextMock.mockResolvedValueOnce({ value: 'docx text' });
     const bytes = new Uint8Array([1, 2, 3]);
-    await expect(extractText({ kind: 'docx', bytes, byteSize: 3 })).resolves.toBe(
-      'docx text',
-    );
+    await expect(extractText({ kind: 'docx', bytes, byteSize: 3 })).resolves.toBe('docx text');
     expect(extractRawTextMock).toHaveBeenCalledOnce();
   });
 });
@@ -60,9 +58,9 @@ describe('extractText (pdf)', () => {
       finishReason: 'stop',
     });
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // "%PDF"
-    await expect(
-      extractText({ kind: 'pdf', bytes, byteSize: bytes.length }),
-    ).resolves.toBe('extracted pdf text');
+    await expect(extractText({ kind: 'pdf', bytes, byteSize: bytes.length })).resolves.toBe(
+      'extracted pdf text',
+    );
     expect(generateTextMock).toHaveBeenCalledOnce();
   });
 

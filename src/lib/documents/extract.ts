@@ -53,9 +53,7 @@ export async function extractText({ kind, bytes, byteSize }: ExtractArgs): Promi
       }
       const text = result.text.trim();
       if (text.length < SCANNED_PDF_OUTPUT_THRESHOLD && byteSize > SCANNED_PDF_INPUT_BYTES) {
-        throw new ExtractEmptyError(
-          'PDF produced almost no text (likely scanned/image-only)',
-        );
+        throw new ExtractEmptyError('PDF produced almost no text (likely scanned/image-only)');
       }
       return text;
     }

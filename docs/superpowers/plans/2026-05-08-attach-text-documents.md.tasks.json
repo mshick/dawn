@@ -25,14 +25,14 @@
     {
       "id": 3,
       "subject": "Task 3: Tokenizer + chunker",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Pure module producing ordered chunks (800-token windows, 100-token overlap, single chunk if total < 2000, boundary-snapped).\n\n**Files:**\n- Create: src/lib/documents/types.ts\n- Create: src/lib/documents/chunk.ts\n- Create: src/lib/documents/chunk.test.ts\n\n**Verify:** pnpm test src/lib/documents/chunk.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/documents/types.ts\",\"src/lib/documents/chunk.ts\",\"src/lib/documents/chunk.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/documents/chunk.test.ts\",\"acceptanceCriteria\":[\"single chunk for short input\",\"single chunk when total < 2000 tokens\",\"long text splits with sequential chunk_index\",\"non-final chunks ~800 tokens\",\"chunks overlap\",\"snaps to paragraph boundary within ±50 tokens\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: Extractor",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** extractText({kind, bytes, byteSize}) for pdf/docx/md/txt with structured errors (ExtractTooLargeError, ExtractEmptyError).\n\n**Files:**\n- Create: src/lib/documents/extract.ts\n- Create: src/lib/documents/extract.test.ts\n\n**Verify:** pnpm test src/lib/documents/extract.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/documents/extract.ts\",\"src/lib/documents/extract.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/documents/extract.test.ts\",\"acceptanceCriteria\":[\"txt and md decode utf-8\",\"docx calls mammoth.extractRawText\",\"pdf calls Anthropic Haiku\",\"ExtractTooLargeError on finishReason=length\",\"ExtractEmptyError on tiny output for big input\"]}\n```"
     },
