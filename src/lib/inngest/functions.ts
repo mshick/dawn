@@ -184,4 +184,8 @@ export const chatStreamTimeoutCleanup = inngest.createFunction(
   },
 );
 
-export const functions = [chatStream, chatStreamTimeoutCleanup];
+export { documentIngest } from './document-ingest';
+
+import { documentIngest } from './document-ingest';
+
+export const functions = [chatStream, chatStreamTimeoutCleanup, documentIngest];
