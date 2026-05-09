@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
+import { Paperclip, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
@@ -15,6 +15,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { DocumentChipRail } from './document-chip-rail';
+import { type ThreadDocument, useThreadDocuments } from './use-thread-documents';
 
 interface Message {
   id: string;
@@ -32,11 +34,17 @@ interface ChatViewProps {
   threads: ThreadSummary[];
   activeThreadId: string | null;
   initialMessages: Message[];
+  initialDocuments: ThreadDocument[];
 }
 
 type Status = 'idle' | 'streaming' | 'error';
 
-export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewProps) {
+export function ChatView({
+  threads,
+  activeThreadId,
+  initialMessages,
+  initialDocuments,
+}: ChatViewProps) {
   const router = useRouter();
   const inputId = useId();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -45,6 +53,8 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [threadId, setThreadId] = useState<string | null>(activeThreadId);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { documents, refresh: refreshDocuments } = useThreadDocuments(threadId, initialDocuments);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -262,6 +272,35 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
     setStatus('idle');
   }, []);
 
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      if (!threadId) return; // disabled state handles UI
+      const list = Array.from(files);
+      // Multiple files upload as parallel POST requests.
+      await Promise.all(
+        list.map(async (file) => {
+          const fd = new FormData();
+          fd.set('file', file);
+          try {
+            const res = await fetch(`/api/threads/${threadId}/documents`, {
+              method: 'POST',
+              body: fd,
+            });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => null)) as { error?: string } | null;
+              setError(`Upload failed: ${body?.error ?? res.status}`);
+            }
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Upload failed');
+          }
+        }),
+      );
+      // The realtime subscription will pick up new rows; this is belt-and-suspenders.
+      void refreshDocuments();
+    },
+    [refreshDocuments, threadId],
+  );
+
   return (
     <div className="flex flex-1">
       <aside className="hidden w-64 flex-col gap-1 border-r p-3 sm:flex">
@@ -336,13 +375,44 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
           {error && <p className="text-sm text-destructive">Error: {error}</p>}
         </div>
 
+        <DocumentChipRail documents={documents} />
+
         <form
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
           }}
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (!threadId || !e.dataTransfer.files.length) return;
+            void uploadFiles(e.dataTransfer.files);
+          }}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,.docx,.md,.txt,text/markdown,text/plain"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) void uploadFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!threadId}
+            title={threadId ? 'Attach document' : 'Send a message first to start a thread.'}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip className="size-4" />
+          </Button>
           <label htmlFor={inputId} className="sr-only">
             Message
           </label>

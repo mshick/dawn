@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
+import { adminDb } from '@/lib/db/admin';
 import { createClient } from '@/lib/supabase/server';
 import { ChatView } from './chat-view';
+import type { ThreadDocument } from './use-thread-documents';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +40,43 @@ export default async function ChatPage({
     messages = data ?? [];
   }
 
+  // Documents for the active thread (chip rail). adminDb is safe here because
+  // we filter by `thread_id` belonging to the authenticated user (the threads
+  // query above already ran under RLS, so the active thread is owned by them).
+  const initialDocuments: ThreadDocument[] = activeThreadId
+    ? (
+        await adminDb
+          .selectFrom('documents')
+          .select([
+            'id',
+            'name',
+            'kind',
+            'byte_size',
+            'status',
+            'error_code',
+            'error_message',
+            'created_at',
+            'ready_at',
+          ])
+          .where('thread_id', '=', activeThreadId)
+          .orderBy('created_at', 'asc')
+          .execute()
+      ).map((d) => ({
+        id: d.id,
+        name: d.name,
+        // DB columns are typed as `string` (Supabase generated types don't
+        // narrow CHECK-constrained columns); the migration restricts these to
+        // the union below.
+        kind: d.kind as ThreadDocument['kind'],
+        byte_size: d.byte_size,
+        status: d.status as ThreadDocument['status'],
+        error_code: d.error_code,
+        error_message: d.error_message,
+        created_at: d.created_at,
+        ready_at: d.ready_at,
+      }))
+    : [];
+
   return (
     <ChatView
       threads={threads ?? []}
@@ -52,6 +91,7 @@ export default async function ChatPage({
           role: m.role,
           text: m.content,
         }))}
+      initialDocuments={initialDocuments}
     />
   );
 }
