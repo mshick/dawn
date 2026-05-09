@@ -4,6 +4,7 @@ import { Paperclip, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
+import { Streamdown } from 'streamdown';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -426,11 +427,7 @@ export function ChatView({
                         ? `${p.type}-${p.toolCallId}`
                         : `${m.id}-text-${i}`;
                     if (p.type === 'text') {
-                      return (
-                        <p key={key} className="whitespace-pre-wrap">
-                          {p.text}
-                        </p>
-                      );
+                      return <Streamdown key={key}>{p.text}</Streamdown>;
                     }
                     if (p.type === 'tool-call') {
                       return (
@@ -452,10 +449,10 @@ export function ChatView({
                       </details>
                     );
                   })
+                ) : m.role === 'assistant' ? (
+                  <Streamdown>{m.text || (status === 'streaming' ? '…' : '')}</Streamdown>
                 ) : (
-                  <p className="whitespace-pre-wrap">
-                    {m.text || (m.role === 'assistant' && status === 'streaming' ? '…' : '')}
-                  </p>
+                  <p className="whitespace-pre-wrap">{m.text}</p>
                 )}
               </div>
             </div>
