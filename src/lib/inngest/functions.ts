@@ -1,6 +1,8 @@
 import { anthropic } from '@ai-sdk/anthropic';
-import { type ModelMessage, streamText } from 'ai';
+import { type ModelMessage, stepCountIs, streamText } from 'ai';
+import { createDocumentTools } from '@/lib/ai/tools/documents';
 import { adminDb } from '@/lib/db/admin';
+import type { Json } from '@/lib/db/database.types';
 import { chatChannel } from './channels';
 import { inngest } from './client';
 
@@ -83,28 +85,67 @@ export const chatStream = inngest.createFunction(
     };
 
     try {
+      const tools = createDocumentTools({ threadId });
+
+      const SYSTEM_PROMPT =
+        'You are a helpful assistant. ' +
+        'Documents may be attached to this conversation. When the user references one, prefer calling search_corpus over guessing. ' +
+        'Use get_chunk_neighbors to expand context around a relevant chunk. ' +
+        "Use get_document_metadata only when the user asks about a document's structure.";
+
       const result = streamText({
         model: anthropic(CLAUDE_MODEL),
         maxOutputTokens: MAX_TOKENS,
+        system: SYSTEM_PROMPT,
         messages,
+        tools,
+        stopWhen: stepCountIs(5),
       });
 
-      for await (const text of result.textStream) {
-        if (!text) continue;
-        buffer += text;
-        inngest.realtime.publish(channel.delta, { text }).catch((err) => {
-          logger.warn('realtime delta publish failed', {
-            err: err instanceof Error ? err.message : String(err),
-          });
-        });
+      const parts: Array<Record<string, unknown>> = [];
+      let currentText = '';
 
-        const now = Date.now();
-        if (now - lastFlushAt >= DEBOUNCE_MS && !pendingFlush) {
-          pendingFlush = flush().finally(() => {
-            pendingFlush = null;
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          const t = part.text;
+          if (!t) continue;
+          buffer += t;
+          currentText += t;
+          inngest.realtime.publish(channel.delta, { text: t }).catch((err) => {
+            logger.warn('realtime delta publish failed', {
+              err: err instanceof Error ? err.message : String(err),
+            });
           });
+          const now = Date.now();
+          if (now - lastFlushAt >= DEBOUNCE_MS && !pendingFlush) {
+            pendingFlush = flush().finally(() => {
+              pendingFlush = null;
+            });
+          }
+        } else if (part.type === 'text-end' || part.type === 'finish-step') {
+          if (currentText) {
+            parts.push({ type: 'text', text: currentText });
+            currentText = '';
+          }
+        } else if (part.type === 'tool-call') {
+          parts.push({
+            type: 'tool-call',
+            toolName: part.toolName,
+            toolCallId: part.toolCallId,
+            args: part.input,
+          });
+        } else if (part.type === 'tool-result') {
+          parts.push({
+            type: 'tool-result',
+            toolName: part.toolName,
+            toolCallId: part.toolCallId,
+            result: part.output,
+          });
+        } else if (part.type === 'error') {
+          throw part.error;
         }
       }
+      if (currentText) parts.push({ type: 'text', text: currentText });
 
       if (pendingFlush) await pendingFlush;
 
@@ -116,6 +157,9 @@ export const chatStream = inngest.createFunction(
         .updateTable('messages')
         .set({
           content: buffer,
+          // Cast: parts is a structured array of plain JSON-serializable objects;
+          // the generated `Json` recursive type can't infer that from `Record<string, unknown>`.
+          parts: parts as unknown as Json,
           completed_at: completedAt.toISOString(),
           finish_reason: finishReason ?? null,
           model: CLAUDE_MODEL,
