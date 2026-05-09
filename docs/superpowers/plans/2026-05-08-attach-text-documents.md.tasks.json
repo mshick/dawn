@@ -5,20 +5,20 @@
     {
       "id": 0,
       "subject": "Task 0: Documents schema migration",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Create documents, chunks, messages.parts, the storage bucket, and add documents to the realtime publication.\n\n**Files:**\n- Create: supabase/migrations/20260508_documents_schema.sql\n\n**Verify:** pnpm db:reset && pnpm generate && pnpm typecheck\n\n```json:metadata\n{\"files\":[\"supabase/migrations/20260508_documents_schema.sql\"],\"verifyCommand\":\"pnpm db:reset && pnpm generate && pnpm typecheck\",\"acceptanceCriteria\":[\"pnpm db:reset runs cleanly\",\"\\\\d public.documents shows expected columns/indexes/policies\",\"\\\\d public.chunks shows HNSW + GIN indexes\",\"documents is in supabase_realtime publication\",\"pnpm generate produces typed entries for documents, chunks, messages.parts\"]}\n```"
     },
     {
       "id": 1,
       "subject": "Task 1: Add new env var + dependencies",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Install mammoth, js-tiktoken, openai. Add OPENAI_API_KEY to env validation and example.\n\n**Files:**\n- Modify: package.json\n- Modify: src/lib/env.ts\n- Modify: .env.example\n\n**Verify:** pnpm install && pnpm typecheck\n\n```json:metadata\n{\"files\":[\"package.json\",\"src/lib/env.ts\",\".env.example\"],\"verifyCommand\":\"pnpm install && pnpm typecheck\",\"acceptanceCriteria\":[\"pnpm install succeeds\",\"OPENAI_API_KEY exposed by env.ts\",\".env.example documents OPENAI_API_KEY\"]}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Storage helper",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Server-only module wrapping the documents bucket (path construction, upload, download, delete).\n\n**Files:**\n- Create: src/lib/storage/documents.ts\n- Create: src/lib/storage/documents.test.ts\n\n**Verify:** pnpm test src/lib/storage/documents.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/storage/documents.ts\",\"src/lib/storage/documents.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/storage/documents.test.ts\",\"acceptanceCriteria\":[\"documentObjectPath builds <user>/<thread>/<doc>.<ext>\",\"upload/download/delete throw on Supabase errors\"]}\n```"
     },

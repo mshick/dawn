@@ -26,12 +26,10 @@ export async function uploadDocumentBlob(args: {
   contentType: string;
 }) {
   const supabase = createAdminClient();
-  const { error } = await supabase.storage
-    .from(DOCUMENTS_BUCKET)
-    .upload(args.path, args.bytes, {
-      contentType: args.contentType,
-      upsert: false,
-    });
+  const { error } = await supabase.storage.from(DOCUMENTS_BUCKET).upload(args.path, args.bytes, {
+    contentType: args.contentType,
+    upsert: false,
+  });
   if (error) throw new Error(`storage upload failed: ${error.message}`);
 }
 
