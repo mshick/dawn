@@ -18,13 +18,20 @@ export interface ThreadDocument {
 export function useThreadDocuments(threadId: string | null, initial: ThreadDocument[]) {
   const [documents, setDocuments] = useState<ThreadDocument[]>(initial);
 
-  const refresh = useCallback(async () => {
-    if (!threadId) return;
-    const res = await fetch(`/api/threads/${threadId}/documents`);
-    if (!res.ok) return;
-    const body = (await res.json()) as { documents: ThreadDocument[] };
-    setDocuments(body.documents);
-  }, [threadId]);
+  // `overrideThreadId` lets callers refresh against a freshly-created thread id
+  // without waiting for the state-bound `threadId` to propagate through the next
+  // render — avoids a stale-closure race in flows that create-then-upload.
+  const refresh = useCallback(
+    async (overrideThreadId?: string) => {
+      const id = overrideThreadId ?? threadId;
+      if (!id) return;
+      const res = await fetch(`/api/threads/${id}/documents`);
+      if (!res.ok) return;
+      const body = (await res.json()) as { documents: ThreadDocument[] };
+      setDocuments(body.documents);
+    },
+    [threadId],
+  );
 
   // Reset when the thread (and therefore the initial list) changes.
   useEffect(() => {
