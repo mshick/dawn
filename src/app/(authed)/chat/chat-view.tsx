@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
+import { Paperclip, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
+import { Streamdown } from 'streamdown';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,11 +16,22 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { DocumentChipRail } from './document-chip-rail';
+import { type ThreadDocument, useThreadDocuments } from './use-thread-documents';
+
+// MessagePart mirrors the shape persisted by the Inngest chatStream function in
+// `messages.parts`. Co-located here (not in a shared module) to keep the
+// renderer the single owner and avoid import cycles with `page.tsx`.
+export type MessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'tool-call'; toolName: string; toolCallId: string; args: unknown }
+  | { type: 'tool-result'; toolName: string; toolCallId: string; result: unknown };
 
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   text: string;
+  parts: MessagePart[] | null;
 }
 
 interface ThreadSummary {
@@ -32,11 +44,17 @@ interface ChatViewProps {
   threads: ThreadSummary[];
   activeThreadId: string | null;
   initialMessages: Message[];
+  initialDocuments: ThreadDocument[];
 }
 
 type Status = 'idle' | 'streaming' | 'error';
 
-export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewProps) {
+export function ChatView({
+  threads,
+  activeThreadId,
+  initialMessages,
+  initialDocuments,
+}: ChatViewProps) {
   const router = useRouter();
   const inputId = useId();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -45,6 +63,12 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [threadId, setThreadId] = useState<string | null>(activeThreadId);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Shared in-flight thread-create promise. Lets concurrent uploadFiles() calls
+  // (e.g. picker + drop, or multiple files in one drop) race for the same thread
+  // instead of creating one per call.
+  const threadCreationPromiseRef = useRef<Promise<string> | null>(null);
+  const { documents, refresh: refreshDocuments } = useThreadDocuments(threadId, initialDocuments);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -161,8 +185,8 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
     const tempAssistantId = `local-assistant-${crypto.randomUUID()}`;
     setMessages((prev) => [
       ...prev,
-      { id: tempUserId, role: 'user', text },
-      { id: tempAssistantId, role: 'assistant', text: '' },
+      { id: tempUserId, role: 'user', text, parts: null },
+      { id: tempAssistantId, role: 'assistant', text: '', parts: null },
     ]);
 
     try {
@@ -220,7 +244,7 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
       const tempAssistantId = `local-assistant-${crypto.randomUUID()}`;
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantMessageId ? { ...m, id: tempAssistantId, text: '' } : m,
+          m.id === assistantMessageId ? { ...m, id: tempAssistantId, text: '', parts: null } : m,
         ),
       );
 
@@ -261,6 +285,70 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
     abortRef.current = null;
     setStatus('idle');
   }, []);
+
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+
+      // Resolve target thread id, creating one on the fly if the user hasn't
+      // started a conversation yet. Concurrent calls share the same in-flight
+      // create via threadCreationPromiseRef so we don't fan out duplicates.
+      let targetThreadId = threadId;
+      if (!targetThreadId) {
+        if (!threadCreationPromiseRef.current) {
+          threadCreationPromiseRef.current = (async () => {
+            const res = await fetch('/api/threads', { method: 'POST' });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => null)) as { error?: string } | null;
+              throw new Error(`Could not create thread: ${body?.error ?? res.status}`);
+            }
+            const body = (await res.json()) as { thread: { id: string } };
+            return body.thread.id;
+          })();
+        }
+        try {
+          targetThreadId = await threadCreationPromiseRef.current;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Could not create thread');
+          threadCreationPromiseRef.current = null;
+          return;
+        }
+        threadCreationPromiseRef.current = null;
+        setThreadId(targetThreadId);
+        // Match the pattern in `send`: bump the ref before router.replace so the
+        // prop-sync effect doesn't treat the URL change as an external nav and
+        // wipe local state mid-upload.
+        lastSyncedActiveThreadIdRef.current = targetThreadId;
+        router.replace(`/chat?thread=${targetThreadId}`);
+      }
+
+      // Multiple files upload as parallel POST requests.
+      await Promise.all(
+        list.map(async (file) => {
+          const fd = new FormData();
+          fd.set('file', file);
+          try {
+            const res = await fetch(`/api/threads/${targetThreadId}/documents`, {
+              method: 'POST',
+              body: fd,
+            });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => null)) as { error?: string } | null;
+              setError(`Upload failed: ${body?.error ?? res.status}`);
+            }
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Upload failed');
+          }
+        }),
+      );
+      // The realtime subscription will pick up new rows; this is belt-and-suspenders.
+      // Pass the fresh threadId in case it was just created — the closure-bound
+      // `refreshDocuments` may still reference the previous (null) thread.
+      void refreshDocuments(targetThreadId);
+    },
+    [refreshDocuments, router, threadId],
+  );
 
   return (
     <div className="flex flex-1">
@@ -328,13 +416,51 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
                   </Button>
                 )}
               </div>
-              <div className="whitespace-pre-wrap text-sm">
-                {m.text || (m.role === 'assistant' && status === 'streaming' ? '…' : '')}
+              <div className="flex flex-col gap-2 text-sm">
+                {m.parts && m.role === 'assistant' ? (
+                  m.parts.map((p, i) => {
+                    // Parts for a stored message are append-only and never
+                    // reordered, so index-with-message-id is a stable key.
+                    // For tool parts we have a real `toolCallId` — prefer it.
+                    const key =
+                      p.type === 'tool-call' || p.type === 'tool-result'
+                        ? `${p.type}-${p.toolCallId}`
+                        : `${m.id}-text-${i}`;
+                    if (p.type === 'text') {
+                      return <Streamdown key={key}>{p.text}</Streamdown>;
+                    }
+                    if (p.type === 'tool-call') {
+                      return (
+                        <details key={key} className="rounded-md border bg-muted/40 p-2 text-xs">
+                          <summary className="cursor-pointer font-mono">
+                            ▶ {p.toolName}({JSON.stringify(p.args)})
+                          </summary>
+                        </details>
+                      );
+                    }
+                    return (
+                      <details key={key} className="rounded-md border bg-muted/40 p-2 text-xs">
+                        <summary className="cursor-pointer font-mono">
+                          ↩ {p.toolName} result
+                        </summary>
+                        <pre className="mt-2 overflow-x-auto">
+                          {JSON.stringify(p.result, null, 2)}
+                        </pre>
+                      </details>
+                    );
+                  })
+                ) : m.role === 'assistant' ? (
+                  <Streamdown>{m.text || (status === 'streaming' ? '…' : '')}</Streamdown>
+                ) : (
+                  <p className="whitespace-pre-wrap">{m.text}</p>
+                )}
               </div>
             </div>
           ))}
           {error && <p className="text-sm text-destructive">Error: {error}</p>}
         </div>
+
+        <DocumentChipRail documents={documents} />
 
         <form
           className="flex gap-2"
@@ -342,7 +468,35 @@ export function ChatView({ threads, activeThreadId, initialMessages }: ChatViewP
             e.preventDefault();
             void send();
           }}
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (!e.dataTransfer.files.length) return;
+            void uploadFiles(e.dataTransfer.files);
+          }}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,.docx,.md,.txt,text/markdown,text/plain"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) void uploadFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title="Attach document"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip className="size-4" />
+          </Button>
           <label htmlFor={inputId} className="sr-only">
             Message
           </label>

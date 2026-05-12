@@ -9,6 +9,122 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string
+          embedding_model: string
+          fts: unknown
+          id: string
+          thread_id: string
+          token_count: number
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding: string
+          embedding_model: string
+          fts?: unknown
+          id?: string
+          thread_id: string
+          token_count: number
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string
+          embedding_model?: string
+          fts?: unknown
+          id?: string
+          thread_id?: string
+          token_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chunks_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          byte_size: number
+          chunk_count: number | null
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          id: string
+          kind: string
+          mime: string
+          name: string
+          ready_at: string | null
+          status: string
+          storage_path: string
+          thread_id: string
+          token_count: number | null
+          user_id: string
+        }
+        Insert: {
+          byte_size: number
+          chunk_count?: number | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          kind: string
+          mime: string
+          name: string
+          ready_at?: string | null
+          status?: string
+          storage_path: string
+          thread_id: string
+          token_count?: number | null
+          user_id: string
+        }
+        Update: {
+          byte_size?: number
+          chunk_count?: number | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          kind?: string
+          mime?: string
+          name?: string
+          ready_at?: string | null
+          status?: string
+          storage_path?: string
+          thread_id?: string
+          token_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           completed_at: string | null
@@ -21,6 +137,7 @@ export type Database = {
           latency_ms: number | null
           model: string | null
           output_tokens: number | null
+          parts: Json | null
           role: string
           superseded_at: string | null
           superseded_by: string | null
@@ -37,6 +154,7 @@ export type Database = {
           latency_ms?: number | null
           model?: string | null
           output_tokens?: number | null
+          parts?: Json | null
           role: string
           superseded_at?: string | null
           superseded_by?: string | null
@@ -53,6 +171,7 @@ export type Database = {
           latency_ms?: number | null
           model?: string | null
           output_tokens?: number | null
+          parts?: Json | null
           role?: string
           superseded_at?: string | null
           superseded_by?: string | null

@@ -1,0 +1,103 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-08-attach-text-documents.md",
+  "lastUpdated": "2026-05-08T00:00:00Z",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Documents schema migration",
+      "status": "completed",
+      "description": "**Goal:** Create documents, chunks, messages.parts, the storage bucket, and add documents to the realtime publication.\n\n**Files:**\n- Create: supabase/migrations/20260508_documents_schema.sql\n\n**Verify:** pnpm db:reset && pnpm generate && pnpm typecheck\n\n```json:metadata\n{\"files\":[\"supabase/migrations/20260508_documents_schema.sql\"],\"verifyCommand\":\"pnpm db:reset && pnpm generate && pnpm typecheck\",\"acceptanceCriteria\":[\"pnpm db:reset runs cleanly\",\"\\\\d public.documents shows expected columns/indexes/policies\",\"\\\\d public.chunks shows HNSW + GIN indexes\",\"documents is in supabase_realtime publication\",\"pnpm generate produces typed entries for documents, chunks, messages.parts\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Add new env var + dependencies",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** Install mammoth, js-tiktoken, openai. Add OPENAI_API_KEY to env validation and example.\n\n**Files:**\n- Modify: package.json\n- Modify: src/lib/env.ts\n- Modify: .env.example\n\n**Verify:** pnpm install && pnpm typecheck\n\n```json:metadata\n{\"files\":[\"package.json\",\"src/lib/env.ts\",\".env.example\"],\"verifyCommand\":\"pnpm install && pnpm typecheck\",\"acceptanceCriteria\":[\"pnpm install succeeds\",\"OPENAI_API_KEY exposed by env.ts\",\".env.example documents OPENAI_API_KEY\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Storage helper",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Server-only module wrapping the documents bucket (path construction, upload, download, delete).\n\n**Files:**\n- Create: src/lib/storage/documents.ts\n- Create: src/lib/storage/documents.test.ts\n\n**Verify:** pnpm test src/lib/storage/documents.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/storage/documents.ts\",\"src/lib/storage/documents.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/storage/documents.test.ts\",\"acceptanceCriteria\":[\"documentObjectPath builds <user>/<thread>/<doc>.<ext>\",\"upload/download/delete throw on Supabase errors\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Tokenizer + chunker",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Pure module producing ordered chunks (800-token windows, 100-token overlap, single chunk if total < 2000, boundary-snapped).\n\n**Files:**\n- Create: src/lib/documents/types.ts\n- Create: src/lib/documents/chunk.ts\n- Create: src/lib/documents/chunk.test.ts\n\n**Verify:** pnpm test src/lib/documents/chunk.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/documents/types.ts\",\"src/lib/documents/chunk.ts\",\"src/lib/documents/chunk.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/documents/chunk.test.ts\",\"acceptanceCriteria\":[\"single chunk for short input\",\"single chunk when total < 2000 tokens\",\"long text splits with sequential chunk_index\",\"non-final chunks ~800 tokens\",\"chunks overlap\",\"snaps to paragraph boundary within ±50 tokens\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Extractor",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** extractText({kind, bytes, byteSize}) for pdf/docx/md/txt with structured errors (ExtractTooLargeError, ExtractEmptyError).\n\n**Files:**\n- Create: src/lib/documents/extract.ts\n- Create: src/lib/documents/extract.test.ts\n\n**Verify:** pnpm test src/lib/documents/extract.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/documents/extract.ts\",\"src/lib/documents/extract.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/documents/extract.test.ts\",\"acceptanceCriteria\":[\"txt and md decode utf-8\",\"docx calls mammoth.extractRawText\",\"pdf calls Anthropic Haiku\",\"ExtractTooLargeError on finishReason=length\",\"ExtractEmptyError on tiny output for big input\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Embedder",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** embedChunks(inputs) batches OpenAI text-embedding-3-small calls (96 per request); returns { model, vectors }.\n\n**Files:**\n- Create: src/lib/documents/embed.ts\n- Create: src/lib/documents/embed.test.ts\n\n**Verify:** pnpm test src/lib/documents/embed.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/documents/embed.ts\",\"src/lib/documents/embed.test.ts\"],\"verifyCommand\":\"pnpm test src/lib/documents/embed.test.ts\",\"acceptanceCriteria\":[\"returns model id and parallel vectors\",\"batches when input length > 96\",\"propagates errors\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: documentIngest Inngest function",
+      "status": "completed",
+      "blockedBy": [0, 2, 3, 4, 5],
+      "description": "**Goal:** Wire extract → chunk → embed → index as Inngest steps; flip status to ready/failed with structured error codes.\n\n**Files:**\n- Create: src/lib/inngest/document-ingest.ts\n- Modify: src/lib/inngest/functions.ts (registry)\n\n**Verify:** pnpm typecheck\n\n```json:metadata\n{\"files\":[\"src/lib/inngest/document-ingest.ts\",\"src/lib/inngest/functions.ts\"],\"verifyCommand\":\"pnpm typecheck\",\"acceptanceCriteria\":[\"id is document-ingest, triggered by document/ingest.requested\",\"success: status=ready, token_count, chunk_count, ready_at set; chunks rows exist\",\"extract/embed/cap failures mapped to error_code\",\"concurrency limit set to 5\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Upload + read routes",
+      "status": "completed",
+      "blockedBy": [0, 2, 6],
+      "description": "**Goal:** POST /api/threads/:id/documents (multipart) and GET /api/threads/:id/documents (list); validate per spec; trigger Inngest.\n\n**Files:**\n- Create: src/app/api/threads/[id]/documents/route.ts\n- Create: src/app/api/threads/[id]/documents/route.test.ts\n\n**Verify:** pnpm test src/app/api/threads/\\[id\\]/documents/route.test.ts\n\n```json:metadata\n{\"files\":[\"src/app/api/threads/[id]/documents/route.ts\",\"src/app/api/threads/[id]/documents/route.test.ts\"],\"verifyCommand\":\"pnpm test\",\"acceptanceCriteria\":[\"401 unauthenticated, 404 unowned, 413 oversize, 415 bad mime, 409 duplicate/file-cap/token-cap, 201 success\",\"uploads to storage and inserts processing row, sends inngest event\",\"GET returns user's documents for the thread\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Retrieval tools (search_corpus, neighbors, metadata)",
+      "status": "completed",
+      "blockedBy": [0, 5],
+      "description": "**Goal:** AI SDK tool factory createDocumentTools({ threadId }) — hybrid (RRF) search, neighbor expansion, document metadata; all scoped to threadId via closure.\n\n**Files:**\n- Create: src/lib/ai/tools/documents.ts\n- Create: src/lib/ai/tools/documents.test.ts\n\n**Verify:** pnpm test src/lib/ai/tools/documents.test.ts\n\n```json:metadata\n{\"files\":[\"src/lib/ai/tools/documents.ts\",\"src/lib/ai/tools/documents.test.ts\"],\"verifyCommand\":\"pnpm test\",\"acceptanceCriteria\":[\"search_corpus returns chunk rows with fused score; vector + lexical halves run in parallel\",\"get_chunk_neighbors clamps before/after to [0,3]; cross-thread returns []\",\"get_document_metadata cross-thread returns null\",\"all tools enforce documents.status='ready'\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Wire tools + parts persistence into chatStream",
+      "status": "completed",
+      "blockedBy": [0, 8],
+      "description": "**Goal:** chatStream uses createDocumentTools; consumes result.fullStream; persists tool steps + text into messages.parts; continues to publish text deltas to realtime channel.\n\n**Files:**\n- Modify: src/lib/inngest/functions.ts (chatStream)\n\n**Verify:** pnpm typecheck\n\n```json:metadata\n{\"files\":[\"src/lib/inngest/functions.ts\"],\"verifyCommand\":\"pnpm typecheck\",\"acceptanceCriteria\":[\"streamText includes tools and stopWhen: stepCountIs(5)\",\"fullStream consumed; text deltas published as realtime delta events\",\"tool calls/results accumulated and persisted to messages.parts\",\"system prompt nudges retrieval tool use\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Document chip rail UI + realtime hook",
+      "status": "completed",
+      "blockedBy": [0, 7],
+      "description": "**Goal:** useThreadDocuments hook (SSR initial + realtime INSERT/UPDATE) and DocumentChipRail component.\n\n**Files:**\n- Create: src/app/(authed)/chat/use-thread-documents.ts\n- Create: src/app/(authed)/chat/document-chip-rail.tsx\n\n**Verify:** pnpm typecheck\n\n```json:metadata\n{\"files\":[\"src/app/(authed)/chat/use-thread-documents.ts\",\"src/app/(authed)/chat/document-chip-rail.tsx\"],\"verifyCommand\":\"pnpm typecheck\",\"acceptanceCriteria\":[\"hook returns documents+refresh and subscribes to INSERT/UPDATE\",\"chip renders state icon and error tooltip\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: SSR initial documents + composer integration",
+      "status": "completed",
+      "blockedBy": [7, 10],
+      "description": "**Goal:** Page SSR loads documents; chat-view shows chip rail; paperclip + drag-drop upload to the route.\n\n**Files:**\n- Modify: src/app/(authed)/chat/page.tsx\n- Modify: src/app/(authed)/chat/chat-view.tsx\n\n**Verify:** pnpm typecheck && pnpm lint\n\n```json:metadata\n{\"files\":[\"src/app/(authed)/chat/page.tsx\",\"src/app/(authed)/chat/chat-view.tsx\"],\"verifyCommand\":\"pnpm typecheck && pnpm lint\",\"acceptanceCriteria\":[\"page passes initialDocuments to ChatView\",\"chip rail renders above the composer\",\"paperclip opens picker; drop uploads files\",\"upload action disabled with tooltip when no thread yet\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: Render assistant `parts` in the message log",
+      "status": "completed",
+      "blockedBy": [9, 11],
+      "description": "**Goal:** When messages.parts is non-null, render parts in order: text segments inline, tool calls/results in collapsed panels.\n\n**Files:**\n- Modify: src/app/(authed)/chat/chat-view.tsx\n- Modify: src/app/(authed)/chat/page.tsx\n\n**Verify:** pnpm typecheck\n\n```json:metadata\n{\"files\":[\"src/app/(authed)/chat/chat-view.tsx\",\"src/app/(authed)/chat/page.tsx\"],\"verifyCommand\":\"pnpm typecheck\",\"acceptanceCriteria\":[\"SSR loads messages.parts and passes to view\",\"parts != null renders text + collapsible tool panels\",\"streaming-time messages still render via text\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: End-to-end manual smoke test",
+      "status": "pending",
+      "blockedBy": [12],
+      "description": "**Goal:** Verify happy path and key failure modes against running stack.\n\n**Files:** none (manual test).\n\n**Verify:** Manual.\n\n```json:metadata\n{\"files\":[],\"verifyCommand\":\"pnpm db:reset && pnpm dev\",\"acceptanceCriteria\":[\"upload TXT/MD/DOCX/PDF flips chips to ready\",\"chunks rows are created\",\"agent answers using a unique phrase from a doc\",\"cross-thread isolation enforced\",\"validation surfaces (too_large, unsupported_type, duplicate_name, file_count_cap)\",\"scanned PDF flips to failed with extract_empty\",\"RLS denies cross-user reads\",\"typecheck and lint pass\"]}\n```"
+    }
+  ]
+}
