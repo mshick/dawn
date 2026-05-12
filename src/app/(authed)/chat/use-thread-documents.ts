@@ -58,10 +58,13 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
       } catch (err) {
         // Roll back the optimistic removal. Re-insert at the original index so
         // chip order matches the server's `created_at asc` ordering.
-        if (snapshot) {
-          // `snapshot` is assigned inside a setState callback so TS can't narrow
-          // the outer binding. Cast to the known non-null shape to satisfy strict.
-          const restore = snapshot as { row: ThreadDocument; index: number };
+        // Re-bind to a const so TS can narrow through the inner closure.
+        // The cast widens `never` back to the declared `let` type — TS narrows
+        // `snapshot` to `never` here because its only assignment is inside a
+        // setState callback; the `if (restore !== null)` guard below handles
+        // the actual narrowing at runtime.
+        const restore = snapshot as { row: ThreadDocument; index: number } | null;
+        if (restore !== null) {
           setDocuments((prev) => {
             if (prev.some((d) => d.id === restore.row.id)) return prev;
             const next = prev.slice();
