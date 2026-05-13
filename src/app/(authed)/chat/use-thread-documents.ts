@@ -33,12 +33,55 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
     [threadId],
   );
 
+  const detach = useCallback(
+    async (documentId: string) => {
+      if (!threadId) return;
+      // `undefined` (rather than `| null`) so TS narrows naturally through the
+      // `if (restore)` guard below. Assignments inside the setState callback
+      // aren't tracked by control-flow analysis, so after the call TS sees
+      // `snapshot` as still-undefined; rebinding to a const lets a truthy
+      // check narrow correctly without a cast.
+      let snapshot: { row: ThreadDocument; index: number } | undefined;
+      setDocuments((prev) => {
+        const index = prev.findIndex((d) => d.id === documentId);
+        if (index === -1) return prev;
+        const row = prev[index];
+        if (!row) return prev;
+        snapshot = { row, index };
+        return prev.filter((d) => d.id !== documentId);
+      });
+      try {
+        const res = await fetch(`/api/threads/${threadId}/documents/${documentId}`, {
+          method: 'DELETE',
+        });
+        // 404 = already gone (another tab won the race). Treat as success.
+        if (!res.ok && res.status !== 404) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (err) {
+        // Roll back the optimistic removal. Re-insert at the original index so
+        // chip order matches the server's `created_at asc` ordering.
+        const restore = snapshot;
+        if (restore) {
+          setDocuments((prev) => {
+            if (prev.some((d) => d.id === restore.row.id)) return prev;
+            const next = prev.slice();
+            next.splice(Math.min(restore.index, next.length), 0, restore.row);
+            return next;
+          });
+        }
+        throw err;
+      }
+    },
+    [threadId],
+  );
+
   // Reset when the thread (and therefore the initial list) changes.
   useEffect(() => {
     setDocuments(initial);
   }, [initial]);
 
-  // Realtime: INSERT/UPDATE on documents filtered by thread.
+  // Realtime: INSERT/UPDATE/DELETE on documents filtered by thread.
   useEffect(() => {
     if (!threadId) return;
     let cancelled = false;
@@ -90,6 +133,22 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
             );
           },
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'documents',
+            filter: `thread_id=eq.${threadId}`,
+          },
+          (payload) => {
+            // `documents` has REPLICA IDENTITY FULL, so payload.old carries the
+            // full pre-delete row.
+            const old = payload.old as { id?: string };
+            if (!old?.id) return;
+            setDocuments((prev) => prev.filter((d) => d.id !== old.id));
+          },
+        )
         .subscribe();
     })();
 
@@ -99,5 +158,5 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
     };
   }, [threadId]);
 
-  return { documents, refresh };
+  return { documents, refresh, detach };
 }

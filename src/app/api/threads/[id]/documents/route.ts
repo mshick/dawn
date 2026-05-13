@@ -8,6 +8,7 @@ import {
   uploadDocumentBlob,
 } from '@/lib/storage/documents';
 import { createClient } from '@/lib/supabase/server';
+import { ensureOwned } from './_shared';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -29,16 +30,6 @@ const KIND_BY_MIME = new Map<string, { kind: 'pdf' | 'docx' | 'md' | 'txt'; ext:
 
 function err(status: number, code: string, extras: Record<string, unknown> = {}) {
   return Response.json({ error: code, ...extras }, { status });
-}
-
-async function ensureOwned(threadId: string, userId: string) {
-  const t = await adminDb
-    .selectFrom('threads')
-    .select(['id'])
-    .where('id', '=', threadId)
-    .where('user_id', '=', userId)
-    .executeTakeFirst();
-  return !!t;
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {

@@ -68,7 +68,11 @@ export function ChatView({
   // (e.g. picker + drop, or multiple files in one drop) race for the same thread
   // instead of creating one per call.
   const threadCreationPromiseRef = useRef<Promise<string> | null>(null);
-  const { documents, refresh: refreshDocuments } = useThreadDocuments(threadId, initialDocuments);
+  const {
+    documents,
+    refresh: refreshDocuments,
+    detach: detachDocument,
+  } = useThreadDocuments(threadId, initialDocuments);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -460,7 +464,7 @@ export function ChatView({
           {error && <p className="text-sm text-destructive">Error: {error}</p>}
         </div>
 
-        <DocumentChipRail documents={documents} />
+        <DocumentChipRail documents={documents} onDetach={detachDocument} />
 
         <form
           className="flex gap-2"

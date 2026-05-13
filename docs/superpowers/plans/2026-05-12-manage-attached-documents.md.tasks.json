@@ -1,0 +1,40 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-12-manage-attached-documents.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Hoist ensureOwned to a shared helper",
+      "status": "completed",
+      "description": "**Goal:** Move the thread-ownership check used by GET/POST into a colocated `_shared.ts` so the new DELETE handler can reuse it.\n\n**Files:**\n- Create: `src/app/api/threads/[id]/documents/_shared.ts`\n- Modify: `src/app/api/threads/[id]/documents/route.ts`\n\n**Acceptance Criteria:**\n- [ ] `_shared.ts` exports `ensureOwned(threadId, userId): Promise<boolean>` mirroring current behavior\n- [ ] `route.ts` imports from `./_shared` and no longer defines the helper locally\n- [ ] `pnpm typecheck` + `pnpm lint` pass\n- [ ] Existing route tests still pass\n\n**Verify:** `pnpm typecheck && pnpm lint && pnpm test src/app/api/threads/[id]/documents/route.test.ts`\n\n```json:metadata\n{\"files\": [\"src/app/api/threads/[id]/documents/_shared.ts\", \"src/app/api/threads/[id]/documents/route.ts\"], \"verifyCommand\": \"pnpm typecheck && pnpm lint && pnpm test src/app/api/threads/[id]/documents/route.test.ts\", \"acceptanceCriteria\": [\"_shared.ts exports ensureOwned\", \"route.ts imports from ./_shared\", \"typecheck + lint pass\", \"existing tests pass\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: DELETE /api/threads/[id]/documents/[documentId] handler",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** Implement the DELETE route — owner-checked, deletes the storage blob (best-effort) and the documents row (cascade drops chunks).\n\n**Files:**\n- Create: `src/app/api/threads/[id]/documents/[documentId]/route.ts`\n- Create: `src/app/api/threads/[id]/documents/[documentId]/route.test.ts`\n\n**Acceptance Criteria:**\n- [ ] 401 when unauthenticated\n- [ ] 404 when thread not owned\n- [ ] 404 when document not in thread\n- [ ] 204 happy path; deleteDocumentBlob called before adminDb.deleteFrom\n- [ ] 204 still returned when blob delete throws; DB delete still runs; console.warn called\n- [ ] Tests cover all 5 cases\n\n**Verify:** `pnpm test src/app/api/threads/[id]/documents/[documentId]/route.test.ts`\n\n```json:metadata\n{\"files\": [\"src/app/api/threads/[id]/documents/[documentId]/route.ts\", \"src/app/api/threads/[id]/documents/[documentId]/route.test.ts\"], \"verifyCommand\": \"pnpm test src/app/api/threads/[id]/documents/[documentId]/route.test.ts && pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"401 unauthenticated\", \"404 not-owned thread\", \"404 doc not in thread\", \"204 happy path with correct order\", \"204 on blob-delete failure with warn\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: useThreadDocuments — DELETE realtime + detach callback",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Add a `detach(documentId)` callback that optimistically removes the chip and rolls back on non-2xx (excluding 404). Add a third realtime subscription for DELETE events.\n\n**Files:**\n- Modify: `src/app/(authed)/chat/use-thread-documents.ts`\n\n**Acceptance Criteria:**\n- [ ] Hook returns `{ documents, refresh, detach }`\n- [ ] `detach` is a no-op when no active threadId\n- [ ] Optimistically removes; on 2xx or 404 keeps removed\n- [ ] On other error: restores chip at original index and rethrows\n- [ ] Third `.on('postgres_changes', { event: 'DELETE', ... })` subscription added; removes row by `payload.old.id`\n- [ ] `pnpm typecheck` + `pnpm lint` pass\n\n**Verify:** `pnpm typecheck && pnpm lint`\n\n```json:metadata\n{\"files\": [\"src/app/(authed)/chat/use-thread-documents.ts\"], \"verifyCommand\": \"pnpm typecheck && pnpm lint\", \"acceptanceCriteria\": [\"hook returns detach\", \"optimistic remove with rollback\", \"404 treated as success\", \"DELETE realtime subscription added\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: DocumentChipRail — X button + confirmation dialog + pending state",
+      "status": "completed",
+      "blockedBy": [2],
+      "description": "**Goal:** Add a per-chip detach control. Clicking X opens a confirmation dialog; confirming invokes onDetach(id). Spinner replaces the X while the request is in flight.\n\n**Files:**\n- Modify: `src/app/(authed)/chat/document-chip-rail.tsx`\n- Create: `src/app/(authed)/chat/document-chip-rail.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] Accepts `onDetach: (id: string) => Promise<void> | void`\n- [ ] X is hidden by default, revealed on group-hover; always visible on failed chips\n- [ ] Clicking X opens AlertDialog with title 'Detach document' + document name\n- [ ] Cancel does not call onDetach\n- [ ] Confirm calls onDetach(id); spinner shown during in-flight call\n- [ ] On reject: error message surfaced; chip remains\n- [ ] 5 tests pass\n\n**Verify:** `pnpm test src/app/(authed)/chat/document-chip-rail.test.tsx`\n\n```json:metadata\n{\"files\": [\"src/app/(authed)/chat/document-chip-rail.tsx\", \"src/app/(authed)/chat/document-chip-rail.test.tsx\"], \"verifyCommand\": \"pnpm test src/app/(authed)/chat/document-chip-rail.test.tsx\", \"acceptanceCriteria\": [\"onDetach prop accepted\", \"X visible on hover/failed\", \"AlertDialog opens with name\", \"Cancel does not invoke\", \"Confirm calls onDetach\", \"spinner during in-flight\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: Wire detach into chat-view.tsx",
+      "status": "completed",
+      "blockedBy": [3],
+      "description": "**Goal:** Destructure `detach` from the hook and pass it to `DocumentChipRail` as `onDetach`. Run full verification + manual smoke test.\n\n**Files:**\n- Modify: `src/app/(authed)/chat/chat-view.tsx`\n\n**Acceptance Criteria:**\n- [ ] `useThreadDocuments` destructure includes `detach`\n- [ ] `<DocumentChipRail documents={documents} onDetach={detach} />`\n- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test` all green\n- [ ] Manual smoke test (sections 1-6 in Task 5 of plan) passes\n\n**Verify:** `pnpm typecheck && pnpm lint && pnpm test`\n\n```json:metadata\n{\"files\": [\"src/app/(authed)/chat/chat-view.tsx\"], \"verifyCommand\": \"pnpm typecheck && pnpm lint && pnpm test\", \"acceptanceCriteria\": [\"detach destructured\", \"onDetach prop wired\", \"full suite green\", \"manual smoke test pass\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-12T20:05:00Z"
+}
