@@ -65,7 +65,7 @@ function docMissing() {
 }
 
 function deleteBuilder(executeSpy: ReturnType<typeof vi.fn>) {
-  return { where: () => ({ execute: executeSpy }) };
+  return { where: () => ({ where: () => ({ execute: executeSpy }) }) };
 }
 
 beforeEach(() => {

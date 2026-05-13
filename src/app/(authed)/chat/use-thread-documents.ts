@@ -36,9 +36,12 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
   const detach = useCallback(
     async (documentId: string) => {
       if (!threadId) return;
-      // Typed explicitly as the non-null shape so TS doesn't narrow to `never`
-      // after the assignment inside the setState callback.
-      let snapshot: { row: ThreadDocument; index: number } | null = null;
+      // `undefined` (rather than `| null`) so TS narrows naturally through the
+      // `if (restore)` guard below. Assignments inside the setState callback
+      // aren't tracked by control-flow analysis, so after the call TS sees
+      // `snapshot` as still-undefined; rebinding to a const lets a truthy
+      // check narrow correctly without a cast.
+      let snapshot: { row: ThreadDocument; index: number } | undefined;
       setDocuments((prev) => {
         const index = prev.findIndex((d) => d.id === documentId);
         if (index === -1) return prev;
@@ -58,13 +61,8 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
       } catch (err) {
         // Roll back the optimistic removal. Re-insert at the original index so
         // chip order matches the server's `created_at asc` ordering.
-        // Re-bind to a const so TS can narrow through the inner closure.
-        // The cast widens `never` back to the declared `let` type — TS narrows
-        // `snapshot` to `never` here because its only assignment is inside a
-        // setState callback; the `if (restore !== null)` guard below handles
-        // the actual narrowing at runtime.
-        const restore = snapshot as { row: ThreadDocument; index: number } | null;
-        if (restore !== null) {
+        const restore = snapshot;
+        if (restore) {
           setDocuments((prev) => {
             if (prev.some((d) => d.id === restore.row.id)) return prev;
             const next = prev.slice();

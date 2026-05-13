@@ -44,7 +44,15 @@ export async function DELETE(
     );
   }
 
-  await adminDb.deleteFrom('documents').where('id', '=', documentId).execute();
+  // Re-encode the ownership constraint in the WHERE clause itself, not just
+  // in the preceding SELECT. Defense in depth against future code paths that
+  // could mutate `thread_id`, refactors that lose the SELECT, or audit-log
+  // readers who can't easily prove the invariant from the DELETE alone.
+  await adminDb
+    .deleteFrom('documents')
+    .where('id', '=', documentId)
+    .where('thread_id', '=', threadId)
+    .execute();
 
   return new Response(null, { status: 204 });
 }
