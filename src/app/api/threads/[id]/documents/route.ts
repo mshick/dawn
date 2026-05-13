@@ -1,6 +1,12 @@
 import 'server-only';
 
 import { adminDb } from '@/lib/db/admin';
+import {
+  CONVERSATION_TOKEN_CAP,
+  MAX_BYTES,
+  MAX_DOCS_PER_THREAD,
+  SUPPORTED_MIME,
+} from '@/lib/documents/upload-limits';
 import { inngest } from '@/lib/inngest/client';
 import {
   deleteDocumentBlob,
@@ -13,20 +19,6 @@ import { ensureOwned } from './_shared';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
-
-const MAX_BYTES = 25 * 1024 * 1024;
-const MAX_DOCS_PER_THREAD = 10;
-const TOKEN_CAP = 500_000;
-
-const KIND_BY_MIME = new Map<string, { kind: 'pdf' | 'docx' | 'md' | 'txt'; ext: string }>([
-  ['application/pdf', { kind: 'pdf', ext: 'pdf' }],
-  [
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    { kind: 'docx', ext: 'docx' },
-  ],
-  ['text/markdown', { kind: 'md', ext: 'md' }],
-  ['text/plain', { kind: 'txt', ext: 'txt' }],
-]);
 
 function err(status: number, code: string, extras: Record<string, unknown> = {}) {
   return Response.json({ error: code, ...extras }, { status });
@@ -79,7 +71,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!(file instanceof File)) return err(400, 'invalid_body');
 
   if (file.size > MAX_BYTES) return err(413, 'too_large');
-  const k = KIND_BY_MIME.get(file.type);
+  const k = SUPPORTED_MIME.get(file.type);
   if (!k) return err(415, 'unsupported_type');
 
   const counts = await adminDb
@@ -95,7 +87,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Estimate: tokens ≈ bytes / 3 (generous).
   const estTokens = Math.floor(file.size / 3);
-  if (Number(counts?.tokens ?? 0) + estTokens > TOKEN_CAP) {
+  if (Number(counts?.tokens ?? 0) + estTokens > CONVERSATION_TOKEN_CAP) {
     return err(409, 'conversation_token_cap');
   }
 

@@ -2,10 +2,9 @@ import { adminDb } from '@/lib/db/admin';
 import { chunkText } from '@/lib/documents/chunk';
 import { EMBEDDING_MODEL, embedChunks } from '@/lib/documents/embed';
 import { ExtractEmptyError, ExtractTooLargeError, extractText } from '@/lib/documents/extract';
+import { CONVERSATION_TOKEN_CAP } from '@/lib/documents/upload-limits';
 import { downloadDocumentBlob } from '@/lib/storage/documents';
 import { inngest } from './client';
-
-const CONVERSATION_TOKEN_CAP = 500_000;
 
 interface IngestPayload {
   documentId: string;

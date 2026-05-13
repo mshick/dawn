@@ -64,14 +64,10 @@ export function ChatView({
   const abortRef = useRef<AbortController | null>(null);
   const [threadId, setThreadId] = useState<string | null>(activeThreadId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // Shared in-flight thread-create promise. Lets concurrent uploadFiles() calls
-  // (e.g. picker + drop, or multiple files in one drop) race for the same thread
-  // instead of creating one per call.
-  const threadCreationPromiseRef = useRef<Promise<string> | null>(null);
   const {
     documents,
-    refresh: refreshDocuments,
-    detach: detachDocument,
+    upload: uploadDocuments,
+    dismiss: dismissDocument,
   } = useThreadDocuments(threadId, initialDocuments);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -292,66 +288,26 @@ export function ChatView({
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
-      const list = Array.from(files);
-      if (list.length === 0) return;
-
-      // Resolve target thread id, creating one on the fly if the user hasn't
-      // started a conversation yet. Concurrent calls share the same in-flight
-      // create via threadCreationPromiseRef so we don't fan out duplicates.
-      let targetThreadId = threadId;
-      if (!targetThreadId) {
-        if (!threadCreationPromiseRef.current) {
-          threadCreationPromiseRef.current = (async () => {
-            const res = await fetch('/api/threads', { method: 'POST' });
-            if (!res.ok) {
-              const body = (await res.json().catch(() => null)) as { error?: string } | null;
-              throw new Error(`Could not create thread: ${body?.error ?? res.status}`);
-            }
-            const body = (await res.json()) as { thread: { id: string } };
-            return body.thread.id;
-          })();
-        }
-        try {
-          targetThreadId = await threadCreationPromiseRef.current;
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Could not create thread');
-          threadCreationPromiseRef.current = null;
-          return;
-        }
-        threadCreationPromiseRef.current = null;
-        setThreadId(targetThreadId);
-        // Match the pattern in `send`: bump the ref before router.replace so the
-        // prop-sync effect doesn't treat the URL change as an external nav and
-        // wipe local state mid-upload.
-        lastSyncedActiveThreadIdRef.current = targetThreadId;
-        router.replace(`/chat?thread=${targetThreadId}`);
-      }
-
-      // Multiple files upload as parallel POST requests.
-      await Promise.all(
-        list.map(async (file) => {
-          const fd = new FormData();
-          fd.set('file', file);
-          try {
-            const res = await fetch(`/api/threads/${targetThreadId}/documents`, {
-              method: 'POST',
-              body: fd,
-            });
-            if (!res.ok) {
-              const body = (await res.json().catch(() => null)) as { error?: string } | null;
-              setError(`Upload failed: ${body?.error ?? res.status}`);
-            }
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Upload failed');
+      await uploadDocuments(files, {
+        ensureThread: async () => {
+          const res = await fetch('/api/threads', { method: 'POST' });
+          if (!res.ok) {
+            const body = (await res.json().catch(() => null)) as { error?: string } | null;
+            throw new Error(`Could not create thread: ${body?.error ?? res.status}`);
           }
-        }),
-      );
-      // The realtime subscription will pick up new rows; this is belt-and-suspenders.
-      // Pass the fresh threadId in case it was just created — the closure-bound
-      // `refreshDocuments` may still reference the previous (null) thread.
-      void refreshDocuments(targetThreadId);
+          const body = (await res.json()) as { thread: { id: string } };
+          const newThreadId = body.thread.id;
+          setThreadId(newThreadId);
+          // Mirror the pattern in `send`: bump the ref before router.replace so
+          // the prop-sync effect doesn't treat the URL change as an external
+          // nav and wipe local state mid-upload.
+          lastSyncedActiveThreadIdRef.current = newThreadId;
+          router.replace(`/chat?thread=${newThreadId}`);
+          return newThreadId;
+        },
+      });
     },
-    [refreshDocuments, router, threadId],
+    [router, uploadDocuments],
   );
 
   return (
@@ -464,7 +420,7 @@ export function ChatView({
           {error && <p className="text-sm text-destructive">Error: {error}</p>}
         </div>
 
-        <DocumentChipRail documents={documents} onDetach={detachDocument} />
+        <DocumentChipRail documents={documents} onDismiss={dismissDocument} />
 
         <form
           className="flex gap-2"
