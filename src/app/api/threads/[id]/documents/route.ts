@@ -110,7 +110,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   await uploadDocumentBlob({ path, bytes, contentType: file.type });
 
-  let inserted: { id: string };
+  let inserted: { id: string; created_at: string };
   try {
     inserted = await adminDb
       .insertInto('documents')
@@ -125,7 +125,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         storage_path: path,
         status: 'processing',
       })
-      .returning(['id'])
+      .returning(['id', 'created_at'])
       .executeTakeFirstOrThrow();
 
     await inngest.send({
@@ -145,6 +145,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         kind: k.kind,
         byte_size: file.size,
         status: 'processing',
+        error_code: null,
+        error_message: null,
+        created_at: inserted.created_at,
+        ready_at: null,
       },
     },
     { status: 201 },

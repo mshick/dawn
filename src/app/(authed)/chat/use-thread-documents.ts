@@ -63,6 +63,11 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
   // the returned `ensureThread` callback. Lets a thread be created exactly
   // once across concurrent uploads.
   const threadCreatePromiseRef = useRef<Promise<string> | null>(null);
+  // Set by upload() right before awaiting ensureThread(). Tells the
+  // reset-on-initial-change effect that the imminent `initialDocuments`
+  // prop swap is one we triggered ourselves — keep pending/rejected
+  // chips from the same upload batch alive across it.
+  const selfCreatedThreadRef = useRef(false);
 
   // `overrideThreadId` lets callers refresh against a freshly-created thread id
   // without waiting for the state-bound `threadId` to propagate through the next
@@ -122,6 +127,47 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
       const list = Array.from(files);
       if (list.length === 0) return;
 
+      // Pre-check every file first. Rejected entries get their chip
+      // immediately and never participate in the rest of the flow — and
+      // critically, a batch where everything fails pre-check must NOT
+      // trigger ensureThread (no point creating a thread just to drop
+      // every file into a rejected chip).
+      const passers: Array<{ file: File; clientId: string; createdAt: string }> = [];
+      for (const file of list) {
+        const clientId = cryptoRandomId();
+        const createdAt = new Date().toISOString();
+        if (file.size > MAX_BYTES) {
+          setRejected((prev) => [
+            ...prev,
+            {
+              clientId,
+              name: file.name,
+              byte_size: file.size,
+              error_code: 'too_large',
+              error_message: null,
+              created_at: createdAt,
+            },
+          ]);
+          continue;
+        }
+        if (!detectKind(file)) {
+          setRejected((prev) => [
+            ...prev,
+            {
+              clientId,
+              name: file.name,
+              byte_size: file.size,
+              error_code: 'unsupported_type',
+              error_message: null,
+              created_at: createdAt,
+            },
+          ]);
+          continue;
+        }
+        passers.push({ file, clientId, createdAt });
+      }
+      if (passers.length === 0) return;
+
       let targetThreadId = threadId;
       if (!targetThreadId) {
         const ensure = options?.ensureThread;
@@ -129,19 +175,21 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
         if (!threadCreatePromiseRef.current) {
           threadCreatePromiseRef.current = ensure();
         }
+        // Tell the reset-on-initial-change effect that the next prop
+        // swap was caused by us; do not wipe pending/rejected chips
+        // that belong to the same upload batch.
+        selfCreatedThreadRef.current = true;
         try {
           targetThreadId = await threadCreatePromiseRef.current;
         } catch (err) {
           threadCreatePromiseRef.current = null;
-          // Surface the rejection as a rejected chip per file so the user
-          // sees what happened instead of a silent failure.
           const ts = new Date().toISOString();
           setRejected((prev) => [
             ...prev,
-            ...list.map((f) => ({
-              clientId: cryptoRandomId(),
-              name: f.name,
-              byte_size: f.size,
+            ...passers.map((p) => ({
+              clientId: p.clientId,
+              name: p.file.name,
+              byte_size: p.file.size,
               error_code: 'thread_create_failed',
               error_message: err instanceof Error ? err.message : null,
               created_at: ts,
@@ -154,41 +202,7 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
       const usedThreadId = targetThreadId;
 
       await Promise.all(
-        list.map(async (file) => {
-          const clientId = cryptoRandomId();
-          const createdAt = new Date().toISOString();
-
-          // Client-side pre-checks. Stay in step with the server route —
-          // both reuse `MAX_BYTES` and `detectKind` from upload-limits.
-          if (file.size > MAX_BYTES) {
-            setRejected((prev) => [
-              ...prev,
-              {
-                clientId,
-                name: file.name,
-                byte_size: file.size,
-                error_code: 'too_large',
-                error_message: null,
-                created_at: createdAt,
-              },
-            ]);
-            return;
-          }
-          if (!detectKind(file)) {
-            setRejected((prev) => [
-              ...prev,
-              {
-                clientId,
-                name: file.name,
-                byte_size: file.size,
-                error_code: 'unsupported_type',
-                error_message: null,
-                created_at: createdAt,
-              },
-            ]);
-            return;
-          }
-
+        passers.map(async ({ file, clientId, createdAt }) => {
           setPending((prev) => [
             ...prev,
             { clientId, name: file.name, byte_size: file.size, created_at: createdAt },
@@ -281,11 +295,13 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
 
   const chips: ChipDocument[] = mergeChips(documents, pending, rejected);
 
-  // Reset when the thread (and therefore the initial list) changes.
   useEffect(() => {
     setDocuments(initial);
-    setPending([]);
-    setRejected([]);
+    if (!selfCreatedThreadRef.current) {
+      setPending([]);
+      setRejected([]);
+    }
+    selfCreatedThreadRef.current = false;
   }, [initial]);
 
   // Realtime: INSERT/UPDATE/DELETE on documents filtered by thread.
@@ -399,7 +415,10 @@ function mergeChips(
         }) satisfies ChipDocument,
     ),
   ];
-  merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Defensive: every code path that produces a chip sets `created_at`,
+  // but a partial realtime payload (REPLICA IDENTITY FULL not propagating
+  // every column, or a future schema change) shouldn't crash the rail.
+  merged.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
   return merged;
 }
 
