@@ -82,7 +82,9 @@ export function DocumentChipRail({ documents, onDetach }: Props) {
                   aria-label={`Detach ${d.name}`}
                   onClick={() => setPendingId(d.id)}
                   className={`rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:opacity-100 ${
-                    failed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    failed
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
                   }`}
                 >
                   <X className="size-3" />
@@ -111,11 +113,11 @@ export function DocumentChipRail({ documents, onDetach }: Props) {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={(e) => {
                 e.preventDefault();
                 void onConfirm();
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Detach
             </AlertDialogAction>
