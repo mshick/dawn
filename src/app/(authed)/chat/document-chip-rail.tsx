@@ -21,7 +21,7 @@ interface Props {
 
 export function DocumentChipRail({ documents, onDetach }: Props) {
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [pendingDetachId, setPendingDetachId] = useState<string | null>(null);
+  const [pendingDetachIds, setPendingDetachIds] = useState<Set<string>>(() => new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const target = documents.find((d) => d.id === pendingId) ?? null;
 
@@ -31,14 +31,23 @@ export function DocumentChipRail({ documents, onDetach }: Props) {
     if (!target) return;
     const id = target.id;
     setPendingId(null);
-    setPendingDetachId(id);
+    setPendingDetachIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     setErrorMessage(null);
     try {
       await onDetach(id);
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : 'Detach failed');
     } finally {
-      setPendingDetachId((curr) => (curr === id ? null : curr));
+      setPendingDetachIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -46,7 +55,7 @@ export function DocumentChipRail({ documents, onDetach }: Props) {
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap gap-2">
         {documents.map((d) => {
-          const inFlight = pendingDetachId === d.id;
+          const inFlight = pendingDetachIds.has(d.id);
           const failed = d.status === 'failed';
           return (
             <span
@@ -95,8 +104,8 @@ export function DocumentChipRail({ documents, onDetach }: Props) {
             <AlertDialogTitle>Detach document</AlertDialogTitle>
             <AlertDialogDescription>
               <span className="font-medium">&ldquo;{target?.name}&rdquo;</span> will be removed from
-              this conversation. The assistant won&apos;t be able to reference it after this. This
-              can&apos;t be undone.
+              this conversation. The assistant won&apos;t be able to retrieve from it after this.
+              This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
