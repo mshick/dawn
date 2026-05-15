@@ -58,12 +58,26 @@ export const chatStream = inngest.createFunction(
       .orderBy('created_at', 'asc')
       .execute();
 
-    const messages: ModelMessage[] = rows
-      .filter(
-        (r): r is { role: 'user' | 'assistant' | 'system'; content: string } =>
-          r.role === 'user' || r.role === 'assistant' || r.role === 'system',
-      )
-      .map((r) => ({ role: r.role, content: r.content }));
+    const history = rows.filter(
+      (r): r is { role: 'user' | 'assistant' | 'system'; content: string } =>
+        r.role === 'user' || r.role === 'assistant' || r.role === 'system',
+    );
+
+    // Anthropic prompt caching: place a cache_control breakpoint on the last
+    // message so the entire prior transcript caches incrementally. Each turn,
+    // the previous turn's breakpoint becomes a cache read for the prefix up to
+    // that point, and a new breakpoint extends the cache to the new boundary.
+    // System prompt + tool definitions get their own breakpoint below.
+    const messages: ModelMessage[] = history.map((r, i) => {
+      const base: ModelMessage = { role: r.role, content: r.content };
+      if (i === history.length - 1) {
+        return {
+          ...base,
+          providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        };
+      }
+      return base;
+    });
 
     let buffer = '';
     let lastFlushAt = 0;
@@ -93,10 +107,17 @@ export const chatStream = inngest.createFunction(
         'Use get_chunk_neighbors to expand context around a relevant chunk. ' +
         "Use get_document_metadata only when the user asks about a document's structure.";
 
+      // Render order is tools → system → messages. A cache_control breakpoint
+      // on the system block caches both tool definitions and the system prompt
+      // together, since both are stable for the lifetime of the conversation.
       const result = streamText({
         model: anthropic(CLAUDE_MODEL),
         maxOutputTokens: MAX_TOKENS,
-        system: SYSTEM_PROMPT,
+        system: {
+          role: 'system',
+          content: SYSTEM_PROMPT,
+          providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        },
         messages,
         tools,
         stopWhen: stepCountIs(5),
@@ -152,6 +173,16 @@ export const chatStream = inngest.createFunction(
       const [finishReason, usage] = await Promise.all([result.finishReason, result.usage]);
       const completedAt = new Date();
       const latencyMs = completedAt.getTime() - startedAt;
+
+      logger.info('chat-stream completed', {
+        streamId,
+        threadId,
+        latencyMs,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens,
+        cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens,
+      });
 
       await adminDb
         .updateTable('messages')
