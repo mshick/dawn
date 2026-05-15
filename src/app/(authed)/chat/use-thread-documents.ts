@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { detectKind, MAX_BYTES } from '@/lib/documents/upload-limits';
 import { createClient } from '@/lib/supabase/client';
 
 export interface ThreadDocument {
@@ -15,8 +16,58 @@ export interface ThreadDocument {
   ready_at: string | null;
 }
 
+export interface PendingUpload {
+  clientId: string;
+  name: string;
+  byte_size: number;
+  created_at: string;
+}
+
+export interface RejectedUpload {
+  clientId: string;
+  name: string;
+  byte_size: number;
+  error_code: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export type ChipDocument =
+  | ({ source: 'server'; clientId?: undefined } & ThreadDocument)
+  | {
+      source: 'pending';
+      clientId: string;
+      id: string;
+      name: string;
+      byte_size: number;
+      status: 'pending';
+      created_at: string;
+    }
+  | {
+      source: 'rejected';
+      clientId: string;
+      id: string;
+      name: string;
+      byte_size: number;
+      status: 'failed';
+      error_code: string;
+      error_message: string | null;
+      created_at: string;
+    };
+
 export function useThreadDocuments(threadId: string | null, initial: ThreadDocument[]) {
   const [documents, setDocuments] = useState<ThreadDocument[]>(initial);
+  const [pending, setPending] = useState<PendingUpload[]>([]);
+  const [rejected, setRejected] = useState<RejectedUpload[]>([]);
+  // Shared in-flight thread-create promise, set externally by chat-view via
+  // the returned `ensureThread` callback. Lets a thread be created exactly
+  // once across concurrent uploads.
+  const threadCreatePromiseRef = useRef<Promise<string> | null>(null);
+  // Set by upload() right before awaiting ensureThread(). Tells the
+  // reset-on-initial-change effect that the imminent `initialDocuments`
+  // prop swap is one we triggered ourselves — keep pending/rejected
+  // chips from the same upload batch alive across it.
+  const selfCreatedThreadRef = useRef(false);
 
   // `overrideThreadId` lets callers refresh against a freshly-created thread id
   // without waiting for the state-bound `threadId` to propagate through the next
@@ -36,11 +87,6 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
   const detach = useCallback(
     async (documentId: string) => {
       if (!threadId) return;
-      // `undefined` (rather than `| null`) so TS narrows naturally through the
-      // `if (restore)` guard below. Assignments inside the setState callback
-      // aren't tracked by control-flow analysis, so after the call TS sees
-      // `snapshot` as still-undefined; rebinding to a const lets a truthy
-      // check narrow correctly without a cast.
       let snapshot: { row: ThreadDocument; index: number } | undefined;
       setDocuments((prev) => {
         const index = prev.findIndex((d) => d.id === documentId);
@@ -54,13 +100,10 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
         const res = await fetch(`/api/threads/${threadId}/documents/${documentId}`, {
           method: 'DELETE',
         });
-        // 404 = already gone (another tab won the race). Treat as success.
         if (!res.ok && res.status !== 404) {
           throw new Error(`HTTP ${res.status}`);
         }
       } catch (err) {
-        // Roll back the optimistic removal. Re-insert at the original index so
-        // chip order matches the server's `created_at asc` ordering.
         const restore = snapshot;
         if (restore) {
           setDocuments((prev) => {
@@ -76,9 +119,189 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
     [threadId],
   );
 
-  // Reset when the thread (and therefore the initial list) changes.
+  // Uploads run in parallel and own all of their UX state via this hook —
+  // pending chip → POST → either drop the pending entry (server row arrives
+  // through realtime / direct insert) or convert it to a rejected entry.
+  const upload = useCallback(
+    async (files: FileList | File[], options?: { ensureThread?: () => Promise<string> }) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+
+      // Pre-check every file first. Rejected entries get their chip
+      // immediately and never participate in the rest of the flow — and
+      // critically, a batch where everything fails pre-check must NOT
+      // trigger ensureThread (no point creating a thread just to drop
+      // every file into a rejected chip).
+      const passers: Array<{ file: File; clientId: string; createdAt: string }> = [];
+      for (const file of list) {
+        const clientId = cryptoRandomId();
+        const createdAt = new Date().toISOString();
+        if (file.size > MAX_BYTES) {
+          setRejected((prev) => [
+            ...prev,
+            {
+              clientId,
+              name: file.name,
+              byte_size: file.size,
+              error_code: 'too_large',
+              error_message: null,
+              created_at: createdAt,
+            },
+          ]);
+          continue;
+        }
+        if (!detectKind(file)) {
+          setRejected((prev) => [
+            ...prev,
+            {
+              clientId,
+              name: file.name,
+              byte_size: file.size,
+              error_code: 'unsupported_type',
+              error_message: null,
+              created_at: createdAt,
+            },
+          ]);
+          continue;
+        }
+        passers.push({ file, clientId, createdAt });
+      }
+      if (passers.length === 0) return;
+
+      let targetThreadId = threadId;
+      if (!targetThreadId) {
+        const ensure = options?.ensureThread;
+        if (!ensure) return;
+        if (!threadCreatePromiseRef.current) {
+          threadCreatePromiseRef.current = ensure();
+        }
+        // Tell the reset-on-initial-change effect that the next prop
+        // swap was caused by us; do not wipe pending/rejected chips
+        // that belong to the same upload batch.
+        selfCreatedThreadRef.current = true;
+        try {
+          targetThreadId = await threadCreatePromiseRef.current;
+        } catch (err) {
+          threadCreatePromiseRef.current = null;
+          const ts = new Date().toISOString();
+          setRejected((prev) => [
+            ...prev,
+            ...passers.map((p) => ({
+              clientId: p.clientId,
+              name: p.file.name,
+              byte_size: p.file.size,
+              error_code: 'thread_create_failed',
+              error_message: err instanceof Error ? err.message : null,
+              created_at: ts,
+            })),
+          ]);
+          return;
+        }
+        threadCreatePromiseRef.current = null;
+      }
+      const usedThreadId = targetThreadId;
+
+      await Promise.all(
+        passers.map(async ({ file, clientId, createdAt }) => {
+          setPending((prev) => [
+            ...prev,
+            { clientId, name: file.name, byte_size: file.size, created_at: createdAt },
+          ]);
+
+          const fd = new FormData();
+          fd.set('file', file);
+          try {
+            const res = await fetch(`/api/threads/${usedThreadId}/documents`, {
+              method: 'POST',
+              body: fd,
+            });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => null)) as {
+                error?: string;
+                message?: string;
+              } | null;
+              setPending((prev) => prev.filter((p) => p.clientId !== clientId));
+              setRejected((prev) => [
+                ...prev,
+                {
+                  clientId,
+                  name: file.name,
+                  byte_size: file.size,
+                  error_code: body?.error ?? 'upload_failed',
+                  error_message: body?.message ?? null,
+                  created_at: createdAt,
+                },
+              ]);
+              return;
+            }
+            // 201: merge the server row into local state immediately so the
+            // chip transitions seamlessly even if realtime is slow. The
+            // eventual INSERT event is idempotent against an existing id.
+            const body = (await res.json().catch(() => null)) as {
+              document?: ThreadDocument;
+            } | null;
+            const serverDoc = body?.document;
+            if (serverDoc) {
+              setDocuments((prev) =>
+                prev.some((d) => d.id === serverDoc.id)
+                  ? prev
+                  : [
+                      ...prev,
+                      {
+                        ...serverDoc,
+                        error_code: serverDoc.error_code ?? null,
+                        error_message: serverDoc.error_message ?? null,
+                        ready_at: serverDoc.ready_at ?? null,
+                      },
+                    ],
+              );
+            }
+            setPending((prev) => prev.filter((p) => p.clientId !== clientId));
+          } catch (err) {
+            setPending((prev) => prev.filter((p) => p.clientId !== clientId));
+            setRejected((prev) => [
+              ...prev,
+              {
+                clientId,
+                name: file.name,
+                byte_size: file.size,
+                error_code: 'upload_failed',
+                error_message: err instanceof Error ? err.message : null,
+                created_at: createdAt,
+              },
+            ]);
+          }
+        }),
+      );
+      void refresh(usedThreadId);
+    },
+    [refresh, threadId],
+  );
+
+  // One handler for both server-row detach and client-only rejected dismiss.
+  // The chip rail doesn't need to know which backing store an entry comes
+  // from — it just passes the chip's id back.
+  const dismiss = useCallback(
+    async (id: string) => {
+      const isRejected = rejected.some((r) => r.clientId === id);
+      if (isRejected) {
+        setRejected((prev) => prev.filter((r) => r.clientId !== id));
+        return;
+      }
+      await detach(id);
+    },
+    [detach, rejected],
+  );
+
+  const chips: ChipDocument[] = mergeChips(documents, pending, rejected);
+
   useEffect(() => {
     setDocuments(initial);
+    if (!selfCreatedThreadRef.current) {
+      setPending([]);
+      setRejected([]);
+    }
+    selfCreatedThreadRef.current = false;
   }, [initial]);
 
   // Realtime: INSERT/UPDATE/DELETE on documents filtered by thread.
@@ -88,9 +311,6 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    // Wait for the user session, then prime realtime with the access token so
-    // postgres_changes evaluates RLS as the authenticated user (not anon — which
-    // can't see `documents` rows under our `documents_select_own` policy).
     void (async () => {
       const {
         data: { session },
@@ -123,10 +343,6 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
             filter: `thread_id=eq.${threadId}`,
           },
           (payload) => {
-            // payload.new may be a partial row when the table's replica identity
-            // is DEFAULT (only the PK + changed columns come through). The
-            // documents migration sets REPLICA IDENTITY FULL, but merge defensively
-            // so we don't blank out `name`/`kind`/`byte_size` if drift ever occurs.
             const partial = payload.new as Partial<ThreadDocument> & { id: string };
             setDocuments((prev) =>
               prev.map((d) => (d.id === partial.id ? { ...d, ...partial } : d)),
@@ -142,8 +358,6 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
             filter: `thread_id=eq.${threadId}`,
           },
           (payload) => {
-            // `documents` has REPLICA IDENTITY FULL, so payload.old carries the
-            // full pre-delete row.
             const old = payload.old as { id?: string };
             if (!old?.id) return;
             setDocuments((prev) => prev.filter((d) => d.id !== old.id));
@@ -158,5 +372,56 @@ export function useThreadDocuments(threadId: string | null, initial: ThreadDocum
     };
   }, [threadId]);
 
-  return { documents, refresh, detach };
+  return { documents: chips, refresh, upload, dismiss };
+}
+
+function mergeChips(
+  documents: ThreadDocument[],
+  pending: PendingUpload[],
+  rejected: RejectedUpload[],
+): ChipDocument[] {
+  const merged: ChipDocument[] = [
+    ...documents.map(
+      (d) =>
+        ({
+          source: 'server',
+          ...d,
+        }) satisfies ChipDocument,
+    ),
+    ...pending.map(
+      (p) =>
+        ({
+          source: 'pending',
+          clientId: p.clientId,
+          id: p.clientId,
+          name: p.name,
+          byte_size: p.byte_size,
+          status: 'pending' as const,
+          created_at: p.created_at,
+        }) satisfies ChipDocument,
+    ),
+    ...rejected.map(
+      (r) =>
+        ({
+          source: 'rejected',
+          clientId: r.clientId,
+          id: r.clientId,
+          name: r.name,
+          byte_size: r.byte_size,
+          status: 'failed' as const,
+          error_code: r.error_code,
+          error_message: r.error_message,
+          created_at: r.created_at,
+        }) satisfies ChipDocument,
+    ),
+  ];
+  // Defensive: every code path that produces a chip sets `created_at`,
+  // but a partial realtime payload (REPLICA IDENTITY FULL not propagating
+  // every column, or a future schema change) shouldn't crash the rail.
+  merged.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
+  return merged;
+}
+
+function cryptoRandomId(): string {
+  return `c-${crypto.randomUUID()}`;
 }
